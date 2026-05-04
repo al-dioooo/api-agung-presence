@@ -12,6 +12,7 @@ This application is a Laravel application and its main Laravel ecosystems packag
 - php - 8.5
 - laravel/framework (LARAVEL) - v13
 - laravel/prompts (PROMPTS) - v0
+- laravel/sanctum (SANCTUM) - v4
 - laravel/boost (BOOST) - v2
 - laravel/mcp (MCP) - v0
 - laravel/pail (PAIL) - v1
@@ -107,6 +108,13 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 - Laravel can be deployed using [Laravel Cloud](https://cloud.laravel.com/), which is the fastest way to deploy and scale production Laravel applications.
 
+=== herd rules ===
+
+# Laravel Herd
+
+- The application is served by Laravel Herd at `https?://[kebab-case-project-dir].test`. Use the `get-absolute-url` tool to generate valid URLs. Never run commands to serve the site. It is always available.
+- Use the `herd` CLI to manage services, PHP versions, and sites (e.g. `herd sites`, `herd services:start <service>`, `herd php:list`). Run `herd list` to discover all available commands.
+
 === laravel/core rules ===
 
 # Do Things the Laravel Way
@@ -154,3 +162,56 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - Do NOT delete tests without approval.
 
 </laravel-boost-guidelines>
+
+=== project conventions ===
+
+# AgungPresence API — Project Conventions
+
+## Purpose
+
+- This is a **backend API** built with Laravel + Sanctum, designed to serve a **PWA frontend built with Next.js**.
+- All responses are JSON. There are no Blade views or server-rendered pages.
+
+## Uniform API Response Structure
+
+Every API endpoint **must** return this structure:
+
+```json
+{
+  "message": "Human-readable message.",
+  "data": { ... }
+}
+```
+
+- Use the `App\Traits\ApiResponse` trait in all controllers.
+- Call `$this->success(message, data, status)` for success responses.
+- Call `$this->error(message, status, data)` for error responses.
+- The `data` key holds all payload. Never put payload keys at the root level (e.g., no `token` or `user` at root — nest them under `data`).
+
+## Controller Conventions
+
+- Controllers live in `app/Http/Controllers/Api/`.
+- Keep controllers thin: delegate validation to **Form Request** classes, delegate response formatting to the `ApiResponse` trait.
+- Use `Illuminate\Http\JsonResponse` as the return type for all controller methods.
+- Use **Eloquent API Resources** (`app/Http/Resources/`) for transforming models in responses.
+
+## Enum Usage
+
+- Roles and other fixed value sets use **PHP string-backed enums** in `app/Enums/`.
+- Cast enum columns in models via the `casts()` method.
+- Validate enum fields using `Rule::enum(EnumClass::class)`.
+
+## Authentication & Authorization
+
+- Authentication uses **Laravel Sanctum** token-based auth (`auth:sanctum` middleware).
+- Role-based access uses the `role:{role}` middleware (`App\Http\Middleware\EnsureUserHasRole`).
+- Admin-only endpoints authorize via `authorize()` in Form Requests or via the `role:administrator` middleware.
+
+## Testing Conventions
+
+- Tests use **Pest** with `LazilyRefreshDatabase`.
+- Group related tests with `describe()` blocks.
+- Use factory states (e.g., `->administrator()`, `->employee()`) instead of manual attribute overrides.
+- For logout/token tests, use real Sanctum tokens via `$user->createToken()` + `$this->withToken()`, not `actingAs()`.
+- Assert the uniform response structure (`data.*` paths).
+
