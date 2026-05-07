@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use App\Enums\AttendanceStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Attendance extends Model
@@ -20,6 +22,8 @@ class Attendance extends Model
         'in_longitude',
         'proof_photo',
         'status',
+        'created_by',
+        'updated_by',
     ];
 
     protected function casts(): array
@@ -30,15 +34,16 @@ class Attendance extends Model
             'date' => 'date',
             'in_latitude' => 'decimal:8',
             'in_longitude' => 'decimal:8',
+            'status' => AttendanceStatus::class,
         ];
     }
 
-    public function user()
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    public function office()
+    public function office(): BelongsTo
     {
         return $this->belongsTo(Office::class);
     }
