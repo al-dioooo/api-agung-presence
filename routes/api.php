@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\OfficeController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/status', function () {
@@ -20,4 +21,8 @@ Route::prefix('auth')->group(function () {
             ->middleware('role:administrator')
             ->name('auth.register');
     });
+});
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::apiResource('offices', OfficeController::class);
 });

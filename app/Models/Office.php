@@ -18,6 +18,8 @@ class Office extends Model
         'radius',
         'photo',
         'is_active',
+        'created_by',
+        'updated_by',
     ];
 
     protected function casts(): array
