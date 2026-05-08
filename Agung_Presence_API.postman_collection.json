@@ -67,6 +67,20 @@
               ]
             }
           },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "if (response?.data?.token) {",
+                  "  pm.environment.set('token', response.data.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "response": []
         },
         {
@@ -157,7 +171,7 @@
     "bearer": [
       {
         "key": "token",
-        "value": "{{bearer_token}}",
+        "value": "{{token}}",
         "type": "string"
       }
     ]
@@ -189,7 +203,7 @@
       "type": "string"
     },
     {
-      "key": "bearer_token",
+      "key": "token",
       "value": "",
       "type": "string"
     }
