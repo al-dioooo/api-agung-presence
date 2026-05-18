@@ -15,8 +15,8 @@ paths:
     get:
       tags:
         - Status
-      summary: Get API status
-      operationId: getApiStatus
+      summary: Status
+      operationId: status
       security: []
       responses:
         "200":
@@ -30,7 +30,7 @@ paths:
     post:
       tags:
         - Auth
-      summary: Log in with username or email
+      summary: Login
       operationId: login
       security: []
       x-postman-event:
@@ -67,8 +67,8 @@ paths:
     get:
       tags:
         - Auth
-      summary: Get authenticated user profile
-      operationId: getAuthenticatedUser
+      summary: Profile
+      operationId: profile
       responses:
         "200":
           description: User profile retrieved.
@@ -83,7 +83,7 @@ paths:
     post:
       tags:
         - Auth
-      summary: Revoke current access token
+      summary: Logout
       operationId: logout
       responses:
         "200":
@@ -99,9 +99,9 @@ paths:
     post:
       tags:
         - Auth
-      summary: Register a user
+      summary: Register
       description: Administrator-only endpoint.
-      operationId: registerUser
+      operationId: register
       requestBody:
         required: true
         content:
@@ -134,7 +134,7 @@ paths:
     get:
       tags:
         - Offices
-      summary: List offices
+      summary: List Offices
       operationId: listOffices
       parameters:
         - name: active_only
@@ -155,7 +155,7 @@ paths:
     post:
       tags:
         - Offices
-      summary: Create office
+      summary: Create Office
       description: Administrator-only endpoint.
       operationId: createOffice
       requestBody:
@@ -193,7 +193,7 @@ paths:
     get:
       tags:
         - Offices
-      summary: Get office
+      summary: Get Office
       operationId: getOffice
       responses:
         "200":
@@ -209,7 +209,7 @@ paths:
     put:
       tags:
         - Offices
-      summary: Update office
+      summary: Update Office
       description: Administrator-only endpoint. Partial updates are accepted by the current Laravel request rules.
       operationId: updateOffice
       requestBody:
@@ -236,7 +236,7 @@ paths:
     patch:
       tags:
         - Offices
-      summary: Partially update office
+      summary: Patch Office
       description: Administrator-only endpoint.
       operationId: patchOffice
       requestBody:
@@ -263,7 +263,7 @@ paths:
     delete:
       tags:
         - Offices
-      summary: Delete office
+      summary: Delete Office
       description: Administrator-only endpoint. The model uses soft deletes.
       operationId: deleteOffice
       responses:
@@ -284,7 +284,7 @@ paths:
     get:
       tags:
         - Attendances
-      summary: List attendances
+      summary: List Attendances
       description: Administrators receive all attendances. Employees receive only their own attendances.
       operationId: listAttendances
       responses:
@@ -299,7 +299,7 @@ paths:
     post:
       tags:
         - Attendances
-      summary: Create attendance
+      summary: Create Attendance
       description: Employees check in for themselves. Administrators must provide `user_id` and can create attendance for another user.
       operationId: createAttendance
       requestBody:
@@ -332,7 +332,7 @@ paths:
     get:
       tags:
         - Attendances
-      summary: Get attendance
+      summary: Get Attendance
       description: Administrators can view any attendance. Employees can view only their own attendance.
       operationId: getAttendance
       responses:
@@ -351,7 +351,7 @@ paths:
     put:
       tags:
         - Attendances
-      summary: Update attendance
+      summary: Update Attendance
       description: Administrators can update any attendance. Employees can update only their own attendance.
       operationId: updateAttendance
       requestBody:
@@ -378,7 +378,7 @@ paths:
     patch:
       tags:
         - Attendances
-      summary: Partially update attendance
+      summary: Patch Attendance
       description: Administrators can update any attendance. Employees can update only their own attendance.
       operationId: patchAttendance
       requestBody:
@@ -405,7 +405,7 @@ paths:
     delete:
       tags:
         - Attendances
-      summary: Delete attendance
+      summary: Delete Attendance
       description: Administrator-only endpoint. The model uses soft deletes.
       operationId: deleteAttendance
       responses:

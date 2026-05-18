@@ -84,7 +84,7 @@
           "response": []
         },
         {
-          "name": "Get Authenticated User",
+          "name": "Profile",
           "request": {
             "method": "GET",
             "header": [
@@ -132,7 +132,7 @@
           "response": []
         },
         {
-          "name": "Register User (Admin Only)",
+          "name": "Register",
           "request": {
             "method": "POST",
             "header": [
@@ -194,18 +194,6 @@
           ""
         ]
       }
-    }
-  ],
-  "variable": [
-    {
-      "key": "base_url",
-      "value": "http://api-agung-presence.test",
-      "type": "string"
-    },
-    {
-      "key": "token",
-      "value": "",
-      "type": "string"
     }
   ]
 }

@@ -207,6 +207,14 @@ Every API endpoint **must** return this structure:
 - Role-based access uses the `role:{role}` middleware (`App\Http\Middleware\EnsureUserHasRole`).
 - Admin-only endpoints authorize via `authorize()` in Form Requests or via the `role:administrator` middleware.
 
+## OpenAPI & Postman Conventions
+
+- Keep `openapi.yaml` request summaries short, unified, and action-oriented because Postman generated collections use these as request names.
+- Use names such as `Login`, `Profile`, `Logout`, `Register`, `List Offices`, `Create Office`, `Get Office`, `Update Office`, `Patch Office`, and `Delete Office`.
+- Use only Postman environment variables for runtime values: `{{base_url}}` for server URLs and `{{token}}` for bearer authentication.
+- Do not define `base_url` or `token` as collection variables in Postman collection JSON; they must come from the active Postman environment.
+- Keep the Login post-response script setting `pm.environment.set('token', response.data.token)` so authenticated requests use the current environment token.
+
 ## Testing Conventions
 
 - Tests use **Pest** with `LazilyRefreshDatabase`.
@@ -214,4 +222,3 @@ Every API endpoint **must** return this structure:
 - Use factory states (e.g., `->administrator()`, `->employee()`) instead of manual attribute overrides.
 - For logout/token tests, use real Sanctum tokens via `$user->createToken()` + `$this->withToken()`, not `actingAs()`.
 - Assert the uniform response structure (`data.*` paths).
-
