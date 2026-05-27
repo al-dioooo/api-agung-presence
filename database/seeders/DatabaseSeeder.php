@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -14,9 +15,14 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        if (! User::where('username', 'angelika')->exists()) {
+            $this->call(UserSeeder::class);
+        }
+
         $this->call([
-            UserSeeder::class,
             OfficeSeeder::class,
+            EmployeeSeeder::class,
+            AttendanceSeeder::class,
         ]);
     }
 }

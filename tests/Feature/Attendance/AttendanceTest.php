@@ -10,7 +10,27 @@ uses(LazilyRefreshDatabase::class);
 
 describe('index', function () {
     test('administrator can list all attendances', function () {
-        Attendance::factory()->count(3)->create();
+        $firstEmployee = User::factory()->employee()->create([
+            'name' => 'First Employee',
+            'username' => 'first.employee',
+            'email' => 'first.employee@example.com',
+        ]);
+        $secondEmployee = User::factory()->employee()->create();
+        Attendance::factory()->create([
+            'user_id' => $firstEmployee->id,
+            'date' => '2026-05-28',
+            'in_at' => '2026-05-28 08:00:00',
+        ]);
+        Attendance::factory()->create([
+            'user_id' => $secondEmployee->id,
+            'date' => '2026-05-27',
+            'in_at' => '2026-05-27 08:00:00',
+        ]);
+        Attendance::factory()->create([
+            'user_id' => $firstEmployee->id,
+            'date' => '2026-05-26',
+            'in_at' => '2026-05-26 08:00:00',
+        ]);
         $admin = User::factory()->administrator()->create();
 
         $response = $this->actingAs($admin)
@@ -18,7 +38,10 @@ describe('index', function () {
 
         $response->assertOk()
             ->assertJsonPath('message', 'Attendances retrieved successfully.')
-            ->assertJsonCount(3, 'data');
+            ->assertJsonCount(3, 'data')
+            ->assertJsonPath('data.0.user.name', 'First Employee')
+            ->assertJsonPath('data.0.user.username', 'first.employee')
+            ->assertJsonPath('data.0.user.email', 'first.employee@example.com');
     });
 
     test('employee can only list their own attendances', function () {
@@ -31,6 +54,61 @@ describe('index', function () {
 
         $response->assertOk()
             ->assertJsonCount(2, 'data');
+
+        foreach ($response->json('data') as $attendance) {
+            expect($attendance['user_id'])->toBe($employee->id);
+        }
+    });
+
+    test('employee cannot use filters to list other users attendances', function () {
+        $employee = User::factory()->employee()->create();
+        $otherUser = User::factory()->employee()->create();
+        $office = Office::factory()->create();
+        Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'office_id' => $office->id,
+            'date' => '2026-05-28',
+        ]);
+        Attendance::factory()->create([
+            'user_id' => $otherUser->id,
+            'office_id' => $office->id,
+            'date' => '2026-05-28',
+        ]);
+
+        $response = $this->actingAs($employee)
+            ->getJson(route('attendances.index', [
+                'office_id' => $office->id,
+                'date' => '2026-05-28',
+            ]));
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.user_id', $employee->id);
+    });
+
+    test('can filter attendances by office and date', function () {
+        $employee = User::factory()->employee()->create();
+        $office = Office::factory()->create();
+        Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'office_id' => $office->id,
+            'date' => '2026-05-28',
+        ]);
+        Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'date' => '2026-05-27',
+        ]);
+
+        $response = $this->actingAs($employee)
+            ->getJson(route('attendances.index', [
+                'office_id' => $office->id,
+                'date' => '2026-05-28',
+            ]));
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.office_id', $office->id)
+            ->assertJsonPath('data.0.date', '2026-05-28');
     });
 
     test('unauthenticated user cannot list attendances', function () {
@@ -48,17 +126,20 @@ describe('store', function () {
         $response = $this->actingAs($employee)
             ->postJson(route('attendances.store'), [
                 'office_id' => $office->id,
+                'in_at' => '2026-05-28 08:01:00',
                 'in_latitude' => -2.965107,
                 'in_longitude' => 104.736443,
             ]);
 
         $response->assertCreated()
             ->assertJsonPath('data.user_id', $employee->id)
-            ->assertJsonPath('data.office_id', $office->id);
+            ->assertJsonPath('data.office_id', $office->id)
+            ->assertJsonPath('data.status', AttendanceStatus::Late->value);
 
         $this->assertDatabaseHas('attendances', [
             'user_id' => $employee->id,
             'office_id' => $office->id,
+            'status' => AttendanceStatus::Late->value,
             'created_by' => $employee->username,
         ]);
     });
@@ -107,6 +188,46 @@ describe('store', function () {
         $response->assertUnprocessable()
             ->assertJsonValidationErrors(['office_id', 'in_latitude', 'in_longitude']);
     });
+
+    test('check in stores on time status when arrival is not after office start time', function () {
+        $employee = User::factory()->employee()->create();
+        $office = Office::factory()->create([
+            'work_start_time' => '08:00',
+            'work_end_time' => '17:00',
+        ]);
+
+        $response = $this->actingAs($employee)
+            ->postJson(route('attendances.store'), [
+                'office_id' => $office->id,
+                'in_at' => '2026-05-28 08:00:00',
+                'in_latitude' => -2.965107,
+                'in_longitude' => 104.736443,
+                'status' => AttendanceStatus::Late->value,
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.status', AttendanceStatus::OnTime->value);
+    });
+
+    test('check in stores late status when arrival is after office start time', function () {
+        $employee = User::factory()->employee()->create();
+        $office = Office::factory()->create([
+            'work_start_time' => '08:00',
+            'work_end_time' => '17:00',
+        ]);
+
+        $response = $this->actingAs($employee)
+            ->postJson(route('attendances.store'), [
+                'office_id' => $office->id,
+                'in_at' => '2026-05-28 08:01:00',
+                'in_latitude' => -2.965107,
+                'in_longitude' => 104.736443,
+                'status' => AttendanceStatus::OnTime->value,
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.status', AttendanceStatus::Late->value);
+    });
 });
 
 describe('show', function () {
@@ -118,7 +239,10 @@ describe('show', function () {
             ->getJson(route('attendances.show', $attendance));
 
         $response->assertOk()
-            ->assertJsonPath('data.id', $attendance->id);
+            ->assertJsonPath('data.id', $attendance->id)
+            ->assertJsonPath('data.user.name', $attendance->user->name)
+            ->assertJsonPath('data.user.username', $attendance->user->username)
+            ->assertJsonPath('data.user.email', $attendance->user->email);
     });
 
     test('employee can view their own attendance', function () {
@@ -182,6 +306,72 @@ describe('update', function () {
             ]);
 
         $response->assertForbidden();
+    });
+});
+
+describe('checkout', function () {
+    test('employee can check out their own active attendance', function () {
+        $employee = User::factory()->employee()->create();
+        $attendance = Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'out_at' => null,
+        ]);
+
+        $response = $this->actingAs($employee)
+            ->postJson(route('attendances.checkout', $attendance));
+
+        $response->assertOk()
+            ->assertJsonPath('message', 'Attendance checked out successfully.')
+            ->assertJsonPath('data.updated_by', $employee->username);
+
+        expect($response->json('data.out_at'))->not->toBeNull();
+
+        $this->assertDatabaseMissing('attendances', [
+            'id' => $attendance->id,
+            'out_at' => null,
+        ]);
+    });
+
+    test('administrator can check out any active attendance', function () {
+        $admin = User::factory()->administrator()->create();
+        $attendance = Attendance::factory()->create(['out_at' => null]);
+
+        $response = $this->actingAs($admin)
+            ->postJson(route('attendances.checkout', $attendance));
+
+        $response->assertOk()
+            ->assertJsonPath('data.updated_by', $admin->username);
+
+        expect($response->json('data.out_at'))->not->toBeNull();
+    });
+
+    test('employee cannot check out other users attendance', function () {
+        $employee = User::factory()->employee()->create();
+        $attendance = Attendance::factory()->create(['out_at' => null]);
+
+        $response = $this->actingAs($employee)
+            ->postJson(route('attendances.checkout', $attendance));
+
+        $response->assertForbidden();
+    });
+
+    test('checkout rejects attendance that is already checked out', function () {
+        $employee = User::factory()->employee()->create();
+        $attendance = Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'out_at' => '2026-05-28 17:00:00',
+        ]);
+
+        $response = $this->actingAs($employee)
+            ->postJson(route('attendances.checkout', $attendance));
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('data.errors.out_at.0', 'Attendance has already been checked out.');
+
+        $this->assertDatabaseHas('attendances', [
+            'id' => $attendance->id,
+            'out_at' => '2026-05-28 17:00:00',
+        ]);
     });
 });
 

@@ -2,7 +2,9 @@
 
 use App\Enums\UserRole;
 use App\Models\User;
+use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 
 uses(LazilyRefreshDatabase::class);
 
@@ -222,5 +224,19 @@ describe('register', function () {
 
         $response->assertUnprocessable()
             ->assertJsonValidationErrors(['role']);
+    });
+});
+
+describe('seeders', function () {
+    test('default administrator uses configured credentials', function () {
+        $this->seed(UserSeeder::class);
+
+        $user = User::where('username', 'angelika')->first();
+
+        expect($user)->not->toBeNull()
+            ->and($user->name)->toBe('Septia Angelika')
+            ->and($user->email)->toBe('hello@angeldaely.com')
+            ->and($user->role)->toBe(UserRole::Administrator)
+            ->and(Hash::check('angelika', $user->password))->toBeTrue();
     });
 });

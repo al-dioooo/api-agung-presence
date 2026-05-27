@@ -27,6 +27,8 @@ class UpdateOfficeRequest extends FormRequest
             'latitude' => ['sometimes', 'numeric', 'between:-90,90'],
             'longitude' => ['sometimes', 'numeric', 'between:-180,180'],
             'radius' => ['sometimes', 'integer', 'min:1'],
+            'work_start_time' => ['sometimes', 'date_format:H:i'],
+            'work_end_time' => ['sometimes', 'date_format:H:i', 'after:work_start_time'],
             'photo' => ['nullable', 'string'],
             'is_active' => ['sometimes', 'boolean'],
         ];

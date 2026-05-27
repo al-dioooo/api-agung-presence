@@ -27,6 +27,8 @@ class StoreOfficeRequest extends FormRequest
             'latitude' => ['required', 'numeric', 'between:-90,90'],
             'longitude' => ['required', 'numeric', 'between:-180,180'],
             'radius' => ['sometimes', 'integer', 'min:1'],
+            'work_start_time' => ['required', 'date_format:H:i'],
+            'work_end_time' => ['required', 'date_format:H:i', 'after:work_start_time'],
             'photo' => ['nullable', 'string'],
             'is_active' => ['sometimes', 'boolean'],
         ];

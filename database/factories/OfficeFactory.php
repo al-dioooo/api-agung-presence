@@ -23,6 +23,8 @@ class OfficeFactory extends Factory
             'latitude' => fake()->latitude(-8, -1),
             'longitude' => fake()->longitude(95, 141),
             'radius' => fake()->numberBetween(20, 100),
+            'work_start_time' => '08:00',
+            'work_end_time' => '17:00',
             'photo' => null,
             'is_active' => true,
         ];

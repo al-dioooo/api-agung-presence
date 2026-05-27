@@ -16,6 +16,8 @@ class Office extends Model
         'latitude',
         'longitude',
         'radius',
+        'work_start_time',
+        'work_end_time',
         'photo',
         'is_active',
         'created_by',

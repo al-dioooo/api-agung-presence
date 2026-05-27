@@ -422,6 +422,31 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/attendances/{attendance}/checkout:
+    parameters:
+      - $ref: "#/components/parameters/AttendanceId"
+    post:
+      tags:
+        - Attendances
+      summary: Checkout Attendance
+      description: Sets `out_at` for an active attendance. Employees can check out only their own attendance; administrators can check out any attendance.
+      operationId: checkoutAttendance
+      responses:
+        "200":
+          description: Attendance checked out successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
 components:
   securitySchemes:
     sanctum:
@@ -560,6 +585,8 @@ components:
         - name
         - latitude
         - longitude
+        - work_start_time
+        - work_end_time
       properties:
         name:
           type: string
@@ -579,6 +606,14 @@ components:
         radius:
           type: integer
           minimum: 1
+        work_start_time:
+          type: string
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          example: "08:00"
+        work_end_time:
+          type: string
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          example: "17:00"
         photo:
           type:
             - string
@@ -607,6 +642,14 @@ components:
         radius:
           type: integer
           minimum: 1
+        work_start_time:
+          type: string
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          example: "08:00"
+        work_end_time:
+          type: string
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          example: "17:00"
         photo:
           type:
             - string
@@ -739,6 +782,8 @@ components:
         - latitude
         - longitude
         - radius
+        - work_start_time
+        - work_end_time
         - is_active
       properties:
         id:
@@ -756,6 +801,18 @@ components:
           type: number
         radius:
           type: integer
+        work_start_time:
+          type:
+            - string
+            - "null"
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          example: "08:00"
+        work_end_time:
+          type:
+            - string
+            - "null"
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          example: "17:00"
         photo:
           type:
             - string

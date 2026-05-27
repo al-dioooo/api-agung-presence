@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\AttendanceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Attendance\StoreAttendanceRequest;
 use App\Http\Requests\Attendance\UpdateAttendanceRequest;
 use App\Http\Resources\AttendanceResource;
 use App\Models\Attendance;
+use App\Models\Office;
 use App\Traits\ApiResponse;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -21,6 +24,8 @@ class AttendanceController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = Attendance::with(['user', 'office'])
+            ->when($request->filled('office_id'), fn ($query) => $query->where('office_id', $request->integer('office_id')))
+            ->when($request->filled('date'), fn ($query) => $query->whereDate('date', $request->date('date')))
             ->orderByDesc('date')
             ->orderByDesc('in_at');
 
@@ -37,6 +42,10 @@ class AttendanceController extends Controller
     public function store(StoreAttendanceRequest $request): JsonResponse
     {
         $data = $request->validated();
+        $office = Office::findOrFail($data['office_id']);
+        $inAt = isset($data['in_at'])
+            ? CarbonImmutable::parse($data['in_at'])
+            : CarbonImmutable::now();
 
         if (! $request->user()?->isAdministrator()) {
             $data['user_id'] = $request->user()?->id;
@@ -44,6 +53,9 @@ class AttendanceController extends Controller
 
         $attendance = Attendance::create([
             ...$data,
+            'date' => $data['date'] ?? $inAt->toDateString(),
+            'in_at' => $inAt,
+            'status' => $this->resolveStatus($inAt, $office),
             'created_by' => $request->user()?->username,
         ]);
 
@@ -76,6 +88,31 @@ class AttendanceController extends Controller
     }
 
     /**
+     * Check out from an active attendance.
+     */
+    public function checkout(Request $request, Attendance $attendance): JsonResponse
+    {
+        if (! $request->user()?->isAdministrator() && $request->user()?->id !== $attendance->user_id) {
+            return $this->error('Unauthorized.', 403);
+        }
+
+        if ($attendance->out_at !== null) {
+            return $this->error('Attendance has already been checked out.', 422, [
+                'errors' => [
+                    'out_at' => ['Attendance has already been checked out.'],
+                ],
+            ]);
+        }
+
+        $attendance->update([
+            'out_at' => now(),
+            'updated_by' => $request->user()?->username,
+        ]);
+
+        return $this->success('Attendance checked out successfully.', new AttendanceResource($attendance->fresh(['user', 'office'])));
+    }
+
+    /**
      * Remove the specified attendance.
      */
     public function destroy(Request $request, Attendance $attendance): JsonResponse
@@ -87,5 +124,14 @@ class AttendanceController extends Controller
         $attendance->delete();
 
         return $this->success('Attendance deleted successfully.');
+    }
+
+    private function resolveStatus(CarbonImmutable $inAt, Office $office): AttendanceStatus
+    {
+        $workStart = CarbonImmutable::parse($inAt->toDateString().' '.$office->work_start_time);
+
+        return $inAt->gt($workStart)
+            ? AttendanceStatus::Late
+            : AttendanceStatus::OnTime;
     }
 }

@@ -25,6 +25,8 @@ class OfficeResource extends JsonResource
             'latitude' => $this->latitude,
             'longitude' => $this->longitude,
             'radius' => $this->radius,
+            'work_start_time' => $this->formatTime($this->work_start_time),
+            'work_end_time' => $this->formatTime($this->work_end_time),
             'photo' => $this->photo,
             'is_active' => $this->is_active,
             'created_by' => $this->created_by,
@@ -32,5 +34,10 @@ class OfficeResource extends JsonResource
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];
+    }
+
+    private function formatTime(?string $time): ?string
+    {
+        return $time === null ? null : substr($time, 0, 5);
     }
 }

@@ -49,14 +49,20 @@ describe('store', function () {
                 'latitude' => -2.965107,
                 'longitude' => 104.736443,
                 'radius' => 50,
+                'work_start_time' => '08:00',
+                'work_end_time' => '17:00',
             ]);
 
         $response->assertCreated()
             ->assertJsonPath('data.name', 'Kantor Baru')
+            ->assertJsonPath('data.work_start_time', '08:00')
+            ->assertJsonPath('data.work_end_time', '17:00')
             ->assertJsonPath('data.created_by', $admin->username);
 
         $this->assertDatabaseHas('offices', [
             'name' => 'Kantor Baru',
+            'work_start_time' => '08:00',
+            'work_end_time' => '17:00',
             'created_by' => $admin->username,
         ]);
     });
@@ -81,7 +87,7 @@ describe('store', function () {
             ->postJson(route('offices.store'), []);
 
         $response->assertUnprocessable()
-            ->assertJsonValidationErrors(['name', 'latitude', 'longitude']);
+            ->assertJsonValidationErrors(['name', 'latitude', 'longitude', 'work_start_time', 'work_end_time']);
     });
 
     test('store validates coordinate bounds', function () {
@@ -92,10 +98,40 @@ describe('store', function () {
                 'name' => 'Invalid Office',
                 'latitude' => 91,
                 'longitude' => 181,
+                'work_start_time' => '08:00',
+                'work_end_time' => '17:00',
             ]);
 
         $response->assertUnprocessable()
             ->assertJsonValidationErrors(['latitude', 'longitude']);
+    });
+
+    test('store validates working time format and order', function () {
+        $admin = User::factory()->administrator()->create();
+
+        $response = $this->actingAs($admin)
+            ->postJson(route('offices.store'), [
+                'name' => 'Invalid Working Time',
+                'latitude' => -2.965107,
+                'longitude' => 104.736443,
+                'work_start_time' => '25:99',
+                'work_end_time' => '08:00',
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonValidationErrors(['work_start_time']);
+
+        $response = $this->actingAs($admin)
+            ->postJson(route('offices.store'), [
+                'name' => 'Invalid Working Time',
+                'latitude' => -2.965107,
+                'longitude' => 104.736443,
+                'work_start_time' => '17:00',
+                'work_end_time' => '08:00',
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonValidationErrors(['work_end_time']);
     });
 });
 
@@ -109,7 +145,9 @@ describe('show', function () {
 
         $response->assertOk()
             ->assertJsonPath('data.id', $office->id)
-            ->assertJsonPath('data.name', $office->name);
+            ->assertJsonPath('data.name', $office->name)
+            ->assertJsonPath('data.work_start_time', '08:00')
+            ->assertJsonPath('data.work_end_time', '17:00');
     });
 
     test('returns 404 for non-existent office', function () {
@@ -130,15 +168,21 @@ describe('update', function () {
         $response = $this->actingAs($admin)
             ->putJson(route('offices.update', $office), [
                 'name' => 'Updated Office',
+                'work_start_time' => '09:00',
+                'work_end_time' => '18:00',
             ]);
 
         $response->assertOk()
             ->assertJsonPath('data.name', 'Updated Office')
+            ->assertJsonPath('data.work_start_time', '09:00')
+            ->assertJsonPath('data.work_end_time', '18:00')
             ->assertJsonPath('data.updated_by', $admin->username);
 
         $this->assertDatabaseHas('offices', [
             'id' => $office->id,
             'name' => 'Updated Office',
+            'work_start_time' => '09:00',
+            'work_end_time' => '18:00',
             'updated_by' => $admin->username,
         ]);
     });
@@ -180,6 +224,20 @@ describe('update', function () {
 
         $response->assertUnprocessable()
             ->assertJsonValidationErrors(['latitude']);
+    });
+
+    test('update validates working time order', function () {
+        $office = Office::factory()->create();
+        $admin = User::factory()->administrator()->create();
+
+        $response = $this->actingAs($admin)
+            ->putJson(route('offices.update', $office), [
+                'work_start_time' => '17:00',
+                'work_end_time' => '08:00',
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonValidationErrors(['work_end_time']);
     });
 });
 
