@@ -29,8 +29,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('offices', OfficeController::class);
     Route::post('attendances/{attendance}/checkout', [AttendanceController::class, 'checkout'])->name('attendances.checkout');
     Route::apiResource('attendances', AttendanceController::class);
-    Route::get('users', [UserController::class, 'index'])->name('users.index');
-    Route::get('users/{user}', [UserController::class, 'show'])->name('users.show');
-    Route::match(['put', 'patch'], 'users/{user}', [UserController::class, 'update'])->name('users.update');
-    Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+    Route::middleware('role:administrator')->group(function () {
+        Route::get('users', [UserController::class, 'index'])->name('users.index');
+        Route::get('users/{user}', [UserController::class, 'show'])->name('users.show');
+        Route::match(['put', 'patch'], 'users/{user}', [UserController::class, 'update'])->name('users.update');
+        Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+    });
 });
