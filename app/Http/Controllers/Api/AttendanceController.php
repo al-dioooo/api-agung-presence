@@ -25,9 +25,16 @@ class AttendanceController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $request->validate([
+            'start_date' => ['sometimes', 'date', 'date_format:Y-m-d'],
+            'end_date' => ['sometimes', 'date', 'date_format:Y-m-d'],
+        ]);
+
         $query = Attendance::with(['user', 'office'])
             ->when($request->filled('office_id'), fn ($query) => $query->where('office_id', $request->integer('office_id')))
             ->when($request->filled('date'), fn ($query) => $query->whereDate('date', $request->date('date')))
+            ->when($request->filled('start_date'), fn ($query) => $query->whereDate('date', '>=', $request->date('start_date')))
+            ->when($request->filled('end_date'), fn ($query) => $query->whereDate('date', '<=', $request->date('end_date')))
             ->orderByDesc('date')
             ->orderByDesc('in_at');
 
@@ -48,6 +55,10 @@ class AttendanceController extends Controller
         $inAt = isset($data['in_at'])
             ? CarbonImmutable::parse($data['in_at'])
             : CarbonImmutable::now();
+
+        if (! $request->user()?->isAdministrator()) {
+            $data['user_id'] = $request->user()?->id;
+        }
 
         if (! $office->is_active) {
             return $this->error('Office is inactive.', 422, [
@@ -70,8 +81,17 @@ class AttendanceController extends Controller
             ]);
         }
 
-        if (! $request->user()?->isAdministrator()) {
-            $data['user_id'] = $request->user()?->id;
+        $hasActiveAttendance = Attendance::query()
+            ->where('user_id', $data['user_id'])
+            ->whereNull('out_at')
+            ->exists();
+
+        if ($hasActiveAttendance) {
+            return $this->error('User already has an active attendance. Please check out first.', 422, [
+                'errors' => [
+                    'user_id' => ['User already has an active attendance. Please check out first.'],
+                ],
+            ]);
         }
 
         $attendance = Attendance::create([

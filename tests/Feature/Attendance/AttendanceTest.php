@@ -111,6 +111,75 @@ describe('index', function () {
             ->assertJsonPath('data.0.date', '2026-05-28');
     });
 
+    test('can filter attendances by inclusive date range', function () {
+        $employee = User::factory()->employee()->create();
+        Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'date' => '2026-05-26',
+            'in_at' => '2026-05-26 08:00:00',
+        ]);
+        Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'date' => '2026-05-27',
+            'in_at' => '2026-05-27 08:00:00',
+        ]);
+        Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'date' => '2026-05-28',
+            'in_at' => '2026-05-28 08:00:00',
+        ]);
+
+        $response = $this->actingAs($employee)
+            ->getJson(route('attendances.index', [
+                'start_date' => '2026-05-27',
+                'end_date' => '2026-05-28',
+            ]));
+
+        $response->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.date', '2026-05-28')
+            ->assertJsonPath('data.1.date', '2026-05-27');
+    });
+
+    test('can filter attendances by open-ended date ranges', function () {
+        $employee = User::factory()->employee()->create();
+        Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'date' => '2026-05-26',
+            'in_at' => '2026-05-26 08:00:00',
+        ]);
+        Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'date' => '2026-05-27',
+            'in_at' => '2026-05-27 08:00:00',
+        ]);
+        Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'date' => '2026-05-28',
+            'in_at' => '2026-05-28 08:00:00',
+        ]);
+
+        $startResponse = $this->actingAs($employee)
+            ->getJson(route('attendances.index', [
+                'start_date' => '2026-05-27',
+            ]));
+
+        $startResponse->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.date', '2026-05-28')
+            ->assertJsonPath('data.1.date', '2026-05-27');
+
+        $endResponse = $this->actingAs($employee)
+            ->getJson(route('attendances.index', [
+                'end_date' => '2026-05-27',
+            ]));
+
+        $endResponse->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.date', '2026-05-27')
+            ->assertJsonPath('data.1.date', '2026-05-26');
+    });
+
     test('unauthenticated user cannot list attendances', function () {
         $response = $this->getJson(route('attendances.index'));
 
@@ -345,6 +414,88 @@ describe('store', function () {
             'user_id' => $employee->id,
             'office_id' => $office->id,
         ]);
+    });
+
+    test('employee cannot check in while another attendance is active', function () {
+        $employee = User::factory()->employee()->create();
+        $firstOffice = Office::factory()->create([
+            'latitude' => -2.965107,
+            'longitude' => 104.736443,
+            'radius' => 50,
+        ]);
+        $secondOffice = Office::factory()->create([
+            'latitude' => -2.964900,
+            'longitude' => 104.736300,
+            'radius' => 50,
+        ]);
+        Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'office_id' => $firstOffice->id,
+            'out_at' => null,
+        ]);
+
+        $response = $this->actingAs($employee)
+            ->postJson(route('attendances.store'), [
+                'office_id' => $secondOffice->id,
+                'in_latitude' => -2.964900,
+                'in_longitude' => 104.736300,
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('data.errors.user_id.0', 'User already has an active attendance. Please check out first.');
+
+        expect(Attendance::query()->where('user_id', $employee->id)->whereNull('out_at')->count())->toBe(1);
+    });
+
+    test('employee can check in again after active attendance is checked out', function () {
+        $employee = User::factory()->employee()->create();
+        $office = Office::factory()->create([
+            'latitude' => -2.965107,
+            'longitude' => 104.736443,
+            'radius' => 50,
+        ]);
+        Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'office_id' => $office->id,
+            'out_at' => '2026-05-28 17:00:00',
+        ]);
+
+        $response = $this->actingAs($employee)
+            ->postJson(route('attendances.store'), [
+                'office_id' => $office->id,
+                'in_latitude' => -2.965107,
+                'in_longitude' => 104.736443,
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.user_id', $employee->id)
+            ->assertJsonPath('data.office_id', $office->id);
+    });
+
+    test('administrator cannot create attendance for a user with active attendance', function () {
+        $admin = User::factory()->administrator()->create();
+        $employee = User::factory()->employee()->create();
+        $office = Office::factory()->create([
+            'latitude' => -2.965107,
+            'longitude' => 104.736443,
+            'radius' => 50,
+        ]);
+        Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'office_id' => $office->id,
+            'out_at' => null,
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->postJson(route('attendances.store'), [
+                'user_id' => $employee->id,
+                'office_id' => $office->id,
+                'in_latitude' => -2.965107,
+                'in_longitude' => 104.736443,
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('data.errors.user_id.0', 'User already has an active attendance. Please check out first.');
     });
 });
 
