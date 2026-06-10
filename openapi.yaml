@@ -78,6 +78,35 @@ paths:
                 $ref: "#/components/schemas/UserResponse"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+    patch:
+      tags:
+        - Auth
+      summary: Update Profile
+      description: Updates the authenticated user's username, email, and/or password.
+      operationId: updateProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileRequest"
+            examples:
+              profile:
+                value:
+                  username: budi_santoso
+                  email: budi@example.com
+                  password: new-password
+      responses:
+        "200":
+          description: User profile updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "422":
+          $ref: "#/components/responses/ValidationError"
 
   /api/auth/logout:
     post:
@@ -135,6 +164,7 @@ paths:
       tags:
         - Offices
       summary: List Offices
+      description: Employees receive only active offices. Administrators receive all offices unless `active_only=true` is passed.
       operationId: listOffices
       parameters:
         - name: active_only
@@ -300,7 +330,7 @@ paths:
       tags:
         - Attendances
       summary: Create Attendance
-      description: Employees check in for themselves. Administrators must provide `user_id` and can create attendance for another user.
+      description: Employees check in for themselves. Administrators must provide `user_id` and can create attendance for another user. The selected office must be active and submitted coordinates must be inside the office radius.
       operationId: createAttendance
       requestBody:
         required: true
@@ -578,6 +608,22 @@ components:
           format: password
         role:
           $ref: "#/components/schemas/UserRole"
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          maxLength: 100
+          pattern: "^[A-Za-z0-9_-]+$"
+          description: Letters, numbers, dash, and underscore only.
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        password:
+          type: string
+          format: password
 
     StoreOfficeRequest:
       type: object

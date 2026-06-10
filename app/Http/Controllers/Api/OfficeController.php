@@ -21,7 +21,10 @@ class OfficeController extends Controller
     public function index(Request $request): JsonResponse
     {
         $offices = Office::query()
-            ->when($request->boolean('active_only'), fn ($query) => $query->where('is_active', true))
+            ->when(
+                $request->boolean('active_only') || ! $request->user()?->isAdministrator(),
+                fn ($query) => $query->where('is_active', true)
+            )
             ->orderBy('name')
             ->get();
 
@@ -44,8 +47,12 @@ class OfficeController extends Controller
     /**
      * Display the specified office.
      */
-    public function show(Office $office): JsonResponse
+    public function show(Request $request, Office $office): JsonResponse
     {
+        if (! $request->user()?->isAdministrator() && ! $office->is_active) {
+            return $this->error('Office not found.', 404);
+        }
+
         return $this->success('Office retrieved successfully.', new OfficeResource($office));
     }
 

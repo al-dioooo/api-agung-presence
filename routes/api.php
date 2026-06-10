@@ -18,6 +18,7 @@ Route::prefix('auth')->group(function () {
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/me', [AuthController::class, 'me'])->name('auth.me');
+        Route::patch('/me', [AuthController::class, 'updateMe'])->name('auth.me.update');
         Route::post('/logout', [AuthController::class, 'logout'])->name('auth.logout');
         Route::post('/register', [AuthController::class, 'register'])
             ->middleware('role:administrator')

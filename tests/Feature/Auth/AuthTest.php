@@ -68,6 +68,22 @@ describe('login', function () {
         $response->assertUnprocessable()
             ->assertJsonValidationErrors(['login', 'password']);
     });
+
+    test('soft deleted user cannot login', function () {
+        $user = User::factory()->create([
+            'username' => 'deleted_user',
+            'password' => 'secret-password',
+        ]);
+        $user->delete();
+
+        $response = $this->postJson(route('auth.login'), [
+            'login' => 'deleted_user',
+            'password' => 'secret-password',
+        ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonValidationErrors(['login']);
+    });
 });
 
 describe('logout', function () {
@@ -109,6 +125,83 @@ describe('me', function () {
 
     test('unauthenticated user cannot access profile', function () {
         $response = $this->getJson(route('auth.me'));
+
+        $response->assertUnauthorized();
+    });
+
+    test('authenticated user can update their profile username and email', function () {
+        $user = User::factory()->create([
+            'username' => 'old_user',
+            'email' => 'old@example.com',
+        ]);
+
+        $response = $this->actingAs($user)
+            ->patchJson(route('auth.me.update'), [
+                'username' => 'new_user',
+                'email' => 'new@example.com',
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('message', 'User profile updated.')
+            ->assertJsonPath('data.username', 'new_user')
+            ->assertJsonPath('data.email', 'new@example.com');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id,
+            'username' => 'new_user',
+            'email' => 'new@example.com',
+        ]);
+    });
+
+    test('authenticated user can update their password', function () {
+        $user = User::factory()->create([
+            'username' => 'password_user',
+            'password' => 'old-password',
+        ]);
+
+        $response = $this->actingAs($user)
+            ->patchJson(route('auth.me.update'), [
+                'password' => 'new-password',
+            ]);
+
+        $response->assertOk();
+
+        expect(Hash::check('new-password', $user->fresh()->password))->toBeTrue();
+    });
+
+    test('profile update validates duplicate username and email', function () {
+        User::factory()->create([
+            'username' => 'taken_user',
+            'email' => 'taken@example.com',
+        ]);
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)
+            ->patchJson(route('auth.me.update'), [
+                'username' => 'taken_user',
+                'email' => 'taken@example.com',
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonValidationErrors(['username', 'email']);
+    });
+
+    test('profile update validates username rules', function () {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)
+            ->patchJson(route('auth.me.update'), [
+                'username' => 'invalid username',
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonValidationErrors(['username']);
+    });
+
+    test('unauthenticated user cannot update profile', function () {
+        $response = $this->patchJson(route('auth.me.update'), [
+            'username' => 'blocked',
+        ]);
 
         $response->assertUnauthorized();
     });

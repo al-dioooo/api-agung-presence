@@ -12,7 +12,7 @@ describe('index', function () {
     test('administrator can list all attendances', function () {
         $firstEmployee = User::factory()->employee()->create([
             'name' => 'First Employee',
-            'username' => 'first.employee',
+            'username' => 'first_employee',
             'email' => 'first.employee@example.com',
         ]);
         $secondEmployee = User::factory()->employee()->create();
@@ -40,7 +40,7 @@ describe('index', function () {
             ->assertJsonPath('message', 'Attendances retrieved successfully.')
             ->assertJsonCount(3, 'data')
             ->assertJsonPath('data.0.user.name', 'First Employee')
-            ->assertJsonPath('data.0.user.username', 'first.employee')
+            ->assertJsonPath('data.0.user.username', 'first_employee')
             ->assertJsonPath('data.0.user.email', 'first.employee@example.com');
     });
 
@@ -121,7 +121,11 @@ describe('index', function () {
 describe('store', function () {
     test('employee can check in (create attendance)', function () {
         $employee = User::factory()->employee()->create();
-        $office = Office::factory()->create();
+        $office = Office::factory()->create([
+            'latitude' => -2.965107,
+            'longitude' => 104.736443,
+            'radius' => 50,
+        ]);
 
         $response = $this->actingAs($employee)
             ->postJson(route('attendances.store'), [
@@ -147,7 +151,11 @@ describe('store', function () {
     test('administrator can create attendance for another user', function () {
         $admin = User::factory()->administrator()->create();
         $employee = User::factory()->employee()->create();
-        $office = Office::factory()->create();
+        $office = Office::factory()->create([
+            'latitude' => -2.965107,
+            'longitude' => 104.736443,
+            'radius' => 50,
+        ]);
 
         $response = $this->actingAs($admin)
             ->postJson(route('attendances.store'), [
@@ -164,7 +172,11 @@ describe('store', function () {
     test('employee cannot provide user_id (it gets overridden by their own)', function () {
         $employee = User::factory()->employee()->create();
         $otherUser = User::factory()->create();
-        $office = Office::factory()->create();
+        $office = Office::factory()->create([
+            'latitude' => -2.965107,
+            'longitude' => 104.736443,
+            'radius' => 50,
+        ]);
 
         $response = $this->actingAs($employee)
             ->postJson(route('attendances.store'), [
@@ -192,6 +204,9 @@ describe('store', function () {
     test('check in stores on time status when arrival is not after office start time', function () {
         $employee = User::factory()->employee()->create();
         $office = Office::factory()->create([
+            'latitude' => -2.965107,
+            'longitude' => 104.736443,
+            'radius' => 50,
             'work_start_time' => '08:00',
             'work_end_time' => '17:00',
         ]);
@@ -212,6 +227,9 @@ describe('store', function () {
     test('check in stores late status when arrival is after office start time', function () {
         $employee = User::factory()->employee()->create();
         $office = Office::factory()->create([
+            'latitude' => -2.965107,
+            'longitude' => 104.736443,
+            'radius' => 50,
             'work_start_time' => '08:00',
             'work_end_time' => '17:00',
         ]);
@@ -227,6 +245,106 @@ describe('store', function () {
 
         $response->assertCreated()
             ->assertJsonPath('data.status', AttendanceStatus::Late->value);
+    });
+
+    test('employee cannot check in at an inactive office', function () {
+        $employee = User::factory()->employee()->create();
+        $office = Office::factory()->inactive()->create([
+            'latitude' => -2.965107,
+            'longitude' => 104.736443,
+            'radius' => 50,
+        ]);
+
+        $response = $this->actingAs($employee)
+            ->postJson(route('attendances.store'), [
+                'office_id' => $office->id,
+                'in_latitude' => -2.965107,
+                'in_longitude' => 104.736443,
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('data.errors.office_id.0', 'Office is inactive.');
+
+        $this->assertDatabaseMissing('attendances', [
+            'user_id' => $employee->id,
+            'office_id' => $office->id,
+        ]);
+    });
+
+    test('employee cannot check in outside office radius', function () {
+        $employee = User::factory()->employee()->create();
+        $office = Office::factory()->create([
+            'latitude' => -2.965107,
+            'longitude' => 104.736443,
+            'radius' => 50,
+        ]);
+
+        $response = $this->actingAs($employee)
+            ->postJson(route('attendances.store'), [
+                'office_id' => $office->id,
+                'in_latitude' => -2.975107,
+                'in_longitude' => 104.746443,
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('data.errors.in_latitude.0', 'Attendance location is outside the office radius.');
+
+        $this->assertDatabaseMissing('attendances', [
+            'user_id' => $employee->id,
+            'office_id' => $office->id,
+        ]);
+    });
+
+    test('administrator cannot create attendance at an inactive office', function () {
+        $admin = User::factory()->administrator()->create();
+        $employee = User::factory()->employee()->create();
+        $office = Office::factory()->inactive()->create([
+            'latitude' => -2.965107,
+            'longitude' => 104.736443,
+            'radius' => 50,
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->postJson(route('attendances.store'), [
+                'user_id' => $employee->id,
+                'office_id' => $office->id,
+                'in_latitude' => -2.965107,
+                'in_longitude' => 104.736443,
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('data.errors.office_id.0', 'Office is inactive.');
+
+        $this->assertDatabaseMissing('attendances', [
+            'user_id' => $employee->id,
+            'office_id' => $office->id,
+        ]);
+    });
+
+    test('administrator cannot create attendance outside office radius', function () {
+        $admin = User::factory()->administrator()->create();
+        $employee = User::factory()->employee()->create();
+        $office = Office::factory()->create([
+            'latitude' => -2.965107,
+            'longitude' => 104.736443,
+            'radius' => 50,
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->postJson(route('attendances.store'), [
+                'user_id' => $employee->id,
+                'office_id' => $office->id,
+                'in_latitude' => -2.975107,
+                'in_longitude' => 104.746443,
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('data.errors.in_latitude.0', 'Attendance location is outside the office radius.');
+
+        $this->assertDatabaseMissing('attendances', [
+            'user_id' => $employee->id,
+            'office_id' => $office->id,
+        ]);
     });
 });
 

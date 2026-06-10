@@ -22,13 +22,37 @@ describe('index', function () {
     test('can filter only active offices', function () {
         Office::factory()->count(2)->create();
         Office::factory()->inactive()->create();
-        $user = User::factory()->create();
+        $user = User::factory()->administrator()->create();
 
         $response = $this->actingAs($user)
             ->getJson(route('offices.index', ['active_only' => true]));
 
         $response->assertOk()
             ->assertJsonCount(2, 'data');
+    });
+
+    test('employee only sees active offices', function () {
+        Office::factory()->count(2)->create();
+        Office::factory()->inactive()->create();
+        $employee = User::factory()->employee()->create();
+
+        $response = $this->actingAs($employee)
+            ->getJson(route('offices.index'));
+
+        $response->assertOk()
+            ->assertJsonCount(2, 'data');
+    });
+
+    test('administrator sees inactive offices by default', function () {
+        Office::factory()->count(2)->create();
+        Office::factory()->inactive()->create();
+        $admin = User::factory()->administrator()->create();
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('offices.index'));
+
+        $response->assertOk()
+            ->assertJsonCount(3, 'data');
     });
 
     test('unauthenticated user cannot list offices', function () {
@@ -148,6 +172,28 @@ describe('show', function () {
             ->assertJsonPath('data.name', $office->name)
             ->assertJsonPath('data.work_start_time', '08:00')
             ->assertJsonPath('data.work_end_time', '17:00');
+    });
+
+    test('employee cannot view inactive office', function () {
+        $office = Office::factory()->inactive()->create();
+        $employee = User::factory()->employee()->create();
+
+        $response = $this->actingAs($employee)
+            ->getJson(route('offices.show', $office));
+
+        $response->assertNotFound();
+    });
+
+    test('administrator can view inactive office', function () {
+        $office = Office::factory()->inactive()->create();
+        $admin = User::factory()->administrator()->create();
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('offices.show', $office));
+
+        $response->assertOk()
+            ->assertJsonPath('data.id', $office->id)
+            ->assertJsonPath('data.is_active', false);
     });
 
     test('returns 404 for non-existent office', function () {

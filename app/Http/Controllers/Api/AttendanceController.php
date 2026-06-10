@@ -18,6 +18,8 @@ class AttendanceController extends Controller
 {
     use ApiResponse;
 
+    private const EARTH_RADIUS_METERS = 6371000;
+
     /**
      * Display a listing of the attendances.
      */
@@ -46,6 +48,27 @@ class AttendanceController extends Controller
         $inAt = isset($data['in_at'])
             ? CarbonImmutable::parse($data['in_at'])
             : CarbonImmutable::now();
+
+        if (! $office->is_active) {
+            return $this->error('Office is inactive.', 422, [
+                'errors' => [
+                    'office_id' => ['Office is inactive.'],
+                ],
+            ]);
+        }
+
+        if ($this->distanceInMeters(
+            (float) $data['in_latitude'],
+            (float) $data['in_longitude'],
+            (float) $office->latitude,
+            (float) $office->longitude,
+        ) > $office->radius) {
+            return $this->error('Attendance location is outside the office radius.', 422, [
+                'errors' => [
+                    'in_latitude' => ['Attendance location is outside the office radius.'],
+                ],
+            ]);
+        }
 
         if (! $request->user()?->isAdministrator()) {
             $data['user_id'] = $request->user()?->id;
@@ -133,5 +156,18 @@ class AttendanceController extends Controller
         return $inAt->gt($workStart)
             ? AttendanceStatus::Late
             : AttendanceStatus::OnTime;
+    }
+
+    private function distanceInMeters(float $fromLatitude, float $fromLongitude, float $toLatitude, float $toLongitude): float
+    {
+        $fromLatitudeRadians = deg2rad($fromLatitude);
+        $toLatitudeRadians = deg2rad($toLatitude);
+        $latitudeDelta = deg2rad($toLatitude - $fromLatitude);
+        $longitudeDelta = deg2rad($toLongitude - $fromLongitude);
+
+        $angle = sin($latitudeDelta / 2) ** 2
+            + cos($fromLatitudeRadians) * cos($toLatitudeRadians) * sin($longitudeDelta / 2) ** 2;
+
+        return self::EARTH_RADIUS_METERS * 2 * atan2(sqrt($angle), sqrt(1 - $angle));
     }
 }

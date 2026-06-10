@@ -73,6 +73,7 @@ class UserController extends Controller
             return $this->error('You cannot delete your own account.', 422);
         }
 
+        $user->tokens()->delete();
         $user->delete();
 
         return $this->success('User deleted successfully.');
