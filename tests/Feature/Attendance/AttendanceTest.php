@@ -432,6 +432,7 @@ describe('store', function () {
             'user_id' => $employee->id,
             'office_id' => $firstOffice->id,
             'out_at' => null,
+            'status' => AttendanceStatus::OnTime,
         ]);
 
         $response = $this->actingAs($employee)
@@ -484,6 +485,7 @@ describe('store', function () {
             'user_id' => $employee->id,
             'office_id' => $office->id,
             'out_at' => null,
+            'status' => AttendanceStatus::OnTime,
         ]);
 
         $response = $this->actingAs($admin)
@@ -496,6 +498,150 @@ describe('store', function () {
 
         $response->assertUnprocessable()
             ->assertJsonPath('data.errors.user_id.0', 'User already has an active attendance. Please check out first.');
+    });
+
+    test('manual attendance does not block a later check in', function () {
+        $employee = User::factory()->employee()->create();
+        $office = Office::factory()->create([
+            'latitude' => -2.965107,
+            'longitude' => 104.736443,
+            'radius' => 50,
+        ]);
+        Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'office_id' => null,
+            'date' => '2026-05-28',
+            'in_at' => null,
+            'out_at' => null,
+            'in_latitude' => null,
+            'in_longitude' => null,
+            'status' => AttendanceStatus::Sick,
+        ]);
+
+        $response = $this->actingAs($employee)
+            ->postJson(route('attendances.store'), [
+                'office_id' => $office->id,
+                'in_latitude' => -2.965107,
+                'in_longitude' => 104.736443,
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.user_id', $employee->id)
+            ->assertJsonPath('data.office_id', $office->id);
+    });
+});
+
+describe('manual store', function () {
+    test('administrator can create a manual sick attendance without office or location data', function () {
+        $admin = User::factory()->administrator()->create();
+        $employee = User::factory()->employee()->create();
+
+        $response = $this->actingAs($admin)
+            ->postJson(route('attendances.manual'), [
+                'user_id' => $employee->id,
+                'date' => '2026-05-28',
+                'status' => AttendanceStatus::Sick->value,
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('message', 'Manual attendance created successfully.')
+            ->assertJsonPath('data.user_id', $employee->id)
+            ->assertJsonPath('data.office_id', null)
+            ->assertJsonPath('data.date', '2026-05-28')
+            ->assertJsonPath('data.in_at', null)
+            ->assertJsonPath('data.out_at', null)
+            ->assertJsonPath('data.in_latitude', null)
+            ->assertJsonPath('data.in_longitude', null)
+            ->assertJsonPath('data.status', AttendanceStatus::Sick->value)
+            ->assertJsonPath('data.created_by', $admin->username);
+
+        $manualAttendance = Attendance::query()
+            ->where('user_id', $employee->id)
+            ->whereDate('date', '2026-05-28')
+            ->first();
+
+        expect($manualAttendance)
+            ->not->toBeNull()
+            ->and($manualAttendance->office_id)->toBeNull()
+            ->and($manualAttendance->in_at)->toBeNull()
+            ->and($manualAttendance->out_at)->toBeNull()
+            ->and($manualAttendance->in_latitude)->toBeNull()
+            ->and($manualAttendance->in_longitude)->toBeNull()
+            ->and($manualAttendance->status)->toBe(AttendanceStatus::Sick)
+            ->and($manualAttendance->created_by)->toBe($admin->username);
+    });
+
+    test('administrator overwrites existing same date attendance instead of creating a duplicate', function () {
+        $admin = User::factory()->administrator()->create();
+        $employee = User::factory()->employee()->create();
+        $office = Office::factory()->create([
+            'latitude' => -2.965107,
+            'longitude' => 104.736443,
+            'radius' => 50,
+        ]);
+        $attendance = Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'office_id' => $office->id,
+            'date' => '2026-05-28',
+            'in_at' => '2026-05-28 08:00:00',
+            'out_at' => '2026-05-28 17:00:00',
+            'in_latitude' => -2.965107,
+            'in_longitude' => 104.736443,
+            'proof_photo' => 'data:image/png;base64,abc',
+            'status' => AttendanceStatus::OnTime,
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->postJson(route('attendances.manual'), [
+                'user_id' => $employee->id,
+                'date' => '2026-05-28',
+                'status' => AttendanceStatus::Leave->value,
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('message', 'Manual attendance updated successfully.')
+            ->assertJsonPath('data.id', $attendance->id)
+            ->assertJsonPath('data.office_id', null)
+            ->assertJsonPath('data.in_at', null)
+            ->assertJsonPath('data.out_at', null)
+            ->assertJsonPath('data.in_latitude', null)
+            ->assertJsonPath('data.in_longitude', null)
+            ->assertJsonPath('data.proof_photo', null)
+            ->assertJsonPath('data.status', AttendanceStatus::Leave->value)
+            ->assertJsonPath('data.updated_by', $admin->username);
+
+        expect(Attendance::query()
+            ->where('user_id', $employee->id)
+            ->whereDate('date', '2026-05-28')
+            ->count())->toBe(1);
+    });
+
+    test('employee cannot create manual attendance', function () {
+        $employee = User::factory()->employee()->create();
+
+        $response = $this->actingAs($employee)
+            ->postJson(route('attendances.manual'), [
+                'user_id' => $employee->id,
+                'date' => '2026-05-28',
+                'status' => AttendanceStatus::Sick->value,
+            ]);
+
+        $response->assertForbidden();
+    });
+
+    test('administrator can only create manual sick or leave attendance', function () {
+        $admin = User::factory()->administrator()->create();
+        $employee = User::factory()->employee()->create();
+
+        $response = $this->actingAs($admin)
+            ->postJson(route('attendances.manual'), [
+                'user_id' => $employee->id,
+                'date' => '2026-05-28',
+                'status' => AttendanceStatus::OnTime->value,
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonValidationErrors(['status']);
     });
 });
 

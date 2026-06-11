@@ -28,6 +28,9 @@ Route::prefix('auth')->group(function () {
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('offices', OfficeController::class);
+    Route::post('attendances/manual', [AttendanceController::class, 'storeManual'])
+        ->middleware('role:administrator')
+        ->name('attendances.manual');
     Route::post('attendances/{attendance}/checkout', [AttendanceController::class, 'checkout'])->name('attendances.checkout');
     Route::apiResource('attendances', AttendanceController::class);
     Route::middleware('role:administrator')->group(function () {
