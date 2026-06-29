@@ -2,12 +2,12 @@
 
 namespace App\Http\Requests\Attendance;
 
-use App\Enums\AttendanceStatus;
+use App\Enums\AttendanceRequestStatus;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class StoreManualAttendanceRequest extends FormRequest
+class ReviewAttendanceRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
@@ -25,15 +25,18 @@ class StoreManualAttendanceRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'user_id' => ['required', 'exists:users,id'],
-            'date' => ['required', 'date', 'date_format:Y-m-d'],
-            'status' => [
+            'approval_status' => [
                 'required',
                 Rule::in([
-                    AttendanceStatus::Sick->value,
-                    AttendanceStatus::Leave->value,
-                    AttendanceStatus::Permit->value,
+                    AttendanceRequestStatus::Approved->value,
+                    AttendanceRequestStatus::Rejected->value,
                 ]),
+            ],
+            'rejection_reason' => [
+                'required_if:approval_status,'.AttendanceRequestStatus::Rejected->value,
+                'nullable',
+                'string',
+                'max:2000',
             ],
         ];
     }

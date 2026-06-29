@@ -10,6 +10,7 @@ tags:
   - name: Auth
   - name: Offices
   - name: Attendances
+  - name: Attendance Requests
 paths:
   /api/status:
     get:
@@ -310,6 +311,124 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/attendance-requests:
+    get:
+      tags:
+        - Attendance Requests
+      summary: List Requests
+      description: Administrators receive all attendance requests. Employees receive only their own requests.
+      operationId: listAttendanceRequests
+      parameters:
+        - name: approval_status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/AttendanceRequestStatus"
+      responses:
+        "200":
+          description: Attendance requests retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRequestCollectionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+    post:
+      tags:
+        - Attendance Requests
+      summary: Create Request
+      description: Employee-only endpoint for Sakit, Cuti, and Izin requests.
+      operationId: createAttendanceRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreAttendanceApplicationRequest"
+            examples:
+              permit:
+                value:
+                  type: permit
+                  start_date: "2026-06-01"
+                  end_date: "2026-06-03"
+                  description: Mengurus dokumen keluarga.
+                  proof_photo: data:image/png;base64,abc
+      responses:
+        "201":
+          description: Attendance request created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRequestResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/attendance-requests/{attendanceRequest}:
+    parameters:
+      - $ref: "#/components/parameters/AttendanceRequestId"
+    get:
+      tags:
+        - Attendance Requests
+      summary: Get Request
+      description: Administrators can view any request. Employees can view only their own request.
+      operationId: getAttendanceRequest
+      responses:
+        "200":
+          description: Attendance request retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRequestResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/attendance-requests/{attendanceRequest}/review:
+    parameters:
+      - $ref: "#/components/parameters/AttendanceRequestId"
+    patch:
+      tags:
+        - Attendance Requests
+      summary: Review Request
+      description: Administrator-only endpoint. Approval creates attendance rows for the request date range; rejection requires a reason.
+      operationId: reviewAttendanceRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewAttendanceRequest"
+            examples:
+              approve:
+                value:
+                  approval_status: approved
+              reject:
+                value:
+                  approval_status: rejected
+                  rejection_reason: Bukti tidak sesuai.
+      responses:
+        "200":
+          description: Attendance request reviewed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRequestResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
   /api/attendances:
     get:
       tags:
@@ -353,6 +472,84 @@ paths:
                 $ref: "#/components/schemas/AttendanceResponse"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/attendances/summary:
+    get:
+      tags:
+        - Attendances
+      summary: Attendance Summary
+      description: Administrator-only per-employee totals. `total_real_check_ins` counts only `on_time` and `late`.
+      operationId: attendanceSummary
+      responses:
+        "200":
+          description: Attendance summary retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSummaryResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/attendances/export:
+    get:
+      tags:
+        - Attendances
+      summary: Export Attendances
+      description: Administrator-only XLSX recap export. This endpoint ignores UI filters.
+      operationId: exportAttendances
+      responses:
+        "200":
+          description: XLSX workbook with attendance detail and totals.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/attendances/manual:
+    post:
+      tags:
+        - Attendances
+      summary: Manual Attendance
+      description: Administrator-only endpoint for direct manual Sakit, Cuti, or Izin attendance records.
+      operationId: manualAttendance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreManualAttendanceRequest"
+            examples:
+              permit:
+                value:
+                  user_id: 1
+                  date: "2026-06-01"
+                  status: permit
+      responses:
+        "200":
+          description: Manual attendance updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceResponse"
+        "201":
+          description: Manual attendance created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "422":
           $ref: "#/components/responses/ValidationError"
 
@@ -498,6 +695,14 @@ components:
       in: path
       required: true
       description: Attendance ID.
+      schema:
+        type: integer
+        format: int64
+    AttendanceRequestId:
+      name: attendanceRequest
+      in: path
+      required: true
+      description: Attendance request ID.
       schema:
         type: integer
         format: int64
@@ -777,6 +982,72 @@ components:
         status:
           $ref: "#/components/schemas/AttendanceStatus"
 
+    StoreManualAttendanceRequest:
+      type: object
+      required:
+        - user_id
+        - date
+        - status
+      properties:
+        user_id:
+          type: integer
+          format: int64
+        date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum:
+            - sick
+            - leave
+            - permit
+
+    StoreAttendanceApplicationRequest:
+      type: object
+      required:
+        - type
+        - start_date
+        - end_date
+        - description
+        - proof_photo
+      properties:
+        type:
+          type: string
+          enum:
+            - sick
+            - leave
+            - permit
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+          description: Must be the same as or after `start_date`.
+        description:
+          type: string
+          maxLength: 2000
+        proof_photo:
+          type: string
+          description: Data URL generated from camera or uploaded image proof.
+
+    ReviewAttendanceRequest:
+      type: object
+      required:
+        - approval_status
+      properties:
+        approval_status:
+          type: string
+          enum:
+            - approved
+            - rejected
+        rejection_reason:
+          type:
+            - string
+            - "null"
+          maxLength: 2000
+          description: Required when `approval_status` is `rejected`.
+
     UserRole:
       type: string
       enum:
@@ -791,6 +1062,14 @@ components:
         - absent
         - sick
         - leave
+        - permit
+
+    AttendanceRequestStatus:
+      type: string
+      enum:
+        - pending
+        - approved
+        - rejected
 
     User:
       type: object
@@ -889,9 +1168,6 @@ components:
       required:
         - id
         - user_id
-        - office_id
-        - in_latitude
-        - in_longitude
         - status
       properties:
         id:
@@ -900,8 +1176,15 @@ components:
         user_id:
           type: integer
           format: int64
+        attendance_request_id:
+          type:
+            - integer
+            - "null"
+          format: int64
         office_id:
-          type: integer
+          type:
+            - integer
+            - "null"
           format: int64
         date:
           type:
@@ -919,9 +1202,13 @@ components:
             - "null"
           format: date-time
         in_latitude:
-          type: number
+          type:
+            - number
+            - "null"
         in_longitude:
-          type: number
+          type:
+            - number
+            - "null"
         proof_photo:
           type:
             - string
@@ -954,6 +1241,133 @@ components:
           oneOf:
             - $ref: "#/components/schemas/Office"
             - type: "null"
+        attendance_request:
+          oneOf:
+            - $ref: "#/components/schemas/AttendanceRequest"
+            - type: "null"
+
+    AttendanceRequest:
+      type: object
+      required:
+        - id
+        - user_id
+        - type
+        - start_date
+        - end_date
+        - description
+        - proof_photo
+        - approval_status
+      properties:
+        id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+        type:
+          type: string
+          enum:
+            - sick
+            - leave
+            - permit
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        description:
+          type: string
+        proof_photo:
+          type: string
+        approval_status:
+          $ref: "#/components/schemas/AttendanceRequestStatus"
+        reviewed_by:
+          type:
+            - integer
+            - "null"
+          format: int64
+        reviewed_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        rejection_reason:
+          type:
+            - string
+            - "null"
+        created_by:
+          type:
+            - string
+            - "null"
+        updated_by:
+          type:
+            - string
+            - "null"
+        created_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        updated_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        user:
+          oneOf:
+            - $ref: "#/components/schemas/User"
+            - type: "null"
+        reviewer:
+          oneOf:
+            - $ref: "#/components/schemas/User"
+            - type: "null"
+
+    AttendanceSummary:
+      type: object
+      required:
+        - user_id
+        - name
+        - username
+        - email
+        - on_time_count
+        - late_count
+        - total_real_check_ins
+      properties:
+        user_id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        on_time_count:
+          type: integer
+        late_count:
+          type: integer
+        total_real_check_ins:
+          type: integer
+        sick_count:
+          type: integer
+        leave_count:
+          type: integer
+        permit_count:
+          type: integer
+        absent_count:
+          type: integer
+        first_attendance_date:
+          type:
+            - string
+            - "null"
+          format: date
+        latest_attendance_date:
+          type:
+            - string
+            - "null"
+          format: date
 
     UserResponse:
       type: object
@@ -1050,5 +1464,42 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Attendance"
+
+    AttendanceRequestResponse:
+      type: object
+      required:
+        - message
+        - data
+      properties:
+        message:
+          type: string
+        data:
+          $ref: "#/components/schemas/AttendanceRequest"
+
+    AttendanceRequestCollectionResponse:
+      type: object
+      required:
+        - message
+        - data
+      properties:
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceRequest"
+
+    AttendanceSummaryResponse:
+      type: object
+      required:
+        - message
+        - data
+      properties:
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceSummary"
 security:
   - sanctum: []

@@ -31,7 +31,7 @@ class AttendanceController extends Controller
             'end_date' => ['sometimes', 'date', 'date_format:Y-m-d'],
         ]);
 
-        $query = Attendance::with(['user', 'office'])
+        $query = Attendance::with(['user', 'office', 'attendanceRequest.user', 'attendanceRequest.reviewer'])
             ->when($request->filled('office_id'), fn ($query) => $query->where('office_id', $request->integer('office_id')))
             ->when($request->filled('date'), fn ($query) => $query->whereDate('date', $request->date('date')))
             ->when($request->filled('start_date'), fn ($query) => $query->whereDate('date', '>=', $request->date('start_date')))
@@ -123,6 +123,7 @@ class AttendanceController extends Controller
 
         $manualData = [
             'office_id' => null,
+            'attendance_request_id' => null,
             'date' => $data['date'],
             'in_at' => null,
             'out_at' => null,
@@ -157,7 +158,7 @@ class AttendanceController extends Controller
             return $this->error('Unauthorized.', 403);
         }
 
-        return $this->success('Attendance retrieved successfully.', new AttendanceResource($attendance->load(['user', 'office'])));
+        return $this->success('Attendance retrieved successfully.', new AttendanceResource($attendance->load(['user', 'office', 'attendanceRequest.user', 'attendanceRequest.reviewer'])));
     }
 
     /**
@@ -170,7 +171,7 @@ class AttendanceController extends Controller
             'updated_by' => $request->user()?->username,
         ]);
 
-        return $this->success('Attendance updated successfully.', new AttendanceResource($attendance->fresh(['user', 'office'])));
+        return $this->success('Attendance updated successfully.', new AttendanceResource($attendance->fresh(['user', 'office', 'attendanceRequest.user', 'attendanceRequest.reviewer'])));
     }
 
     /**
@@ -195,7 +196,7 @@ class AttendanceController extends Controller
             'updated_by' => $request->user()?->username,
         ]);
 
-        return $this->success('Attendance checked out successfully.', new AttendanceResource($attendance->fresh(['user', 'office'])));
+        return $this->success('Attendance checked out successfully.', new AttendanceResource($attendance->fresh(['user', 'office', 'attendanceRequest.user', 'attendanceRequest.reviewer'])));
     }
 
     /**

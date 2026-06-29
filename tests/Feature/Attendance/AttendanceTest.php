@@ -643,6 +643,31 @@ describe('manual store', function () {
         $response->assertUnprocessable()
             ->assertJsonValidationErrors(['status']);
     });
+
+    test('administrator can create a manual permit attendance', function () {
+        $admin = User::factory()->administrator()->create();
+        $employee = User::factory()->employee()->create();
+
+        $response = $this->actingAs($admin)
+            ->postJson(route('attendances.manual'), [
+                'user_id' => $employee->id,
+                'date' => '2026-05-28',
+                'status' => AttendanceStatus::Permit->value,
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.user_id', $employee->id)
+            ->assertJsonPath('data.status', AttendanceStatus::Permit->value)
+            ->assertJsonPath('data.office_id', null)
+            ->assertJsonPath('data.in_at', null);
+
+        expect(Attendance::query()
+            ->where('user_id', $employee->id)
+            ->whereDate('date', '2026-05-28')
+            ->where('status', AttendanceStatus::Permit->value)
+            ->where('created_by', $admin->username)
+            ->exists())->toBeTrue();
+    });
 });
 
 describe('show', function () {

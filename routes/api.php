@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Api\AttendanceController;
+use App\Http\Controllers\Api\AttendanceReportController;
+use App\Http\Controllers\Api\AttendanceRequestController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\OfficeController;
 use App\Http\Controllers\Api\UserController;
@@ -28,6 +30,21 @@ Route::prefix('auth')->group(function () {
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('offices', OfficeController::class);
+    Route::get('attendance-requests', [AttendanceRequestController::class, 'index'])
+        ->name('attendance-requests.index');
+    Route::post('attendance-requests', [AttendanceRequestController::class, 'store'])
+        ->name('attendance-requests.store');
+    Route::get('attendance-requests/{attendanceRequest}', [AttendanceRequestController::class, 'show'])
+        ->name('attendance-requests.show');
+    Route::patch('attendance-requests/{attendanceRequest}/review', [AttendanceRequestController::class, 'review'])
+        ->middleware('role:administrator')
+        ->name('attendance-requests.review');
+    Route::get('attendances/summary', [AttendanceReportController::class, 'summary'])
+        ->middleware('role:administrator')
+        ->name('attendances.summary');
+    Route::get('attendances/export', [AttendanceReportController::class, 'export'])
+        ->middleware('role:administrator')
+        ->name('attendances.export');
     Route::post('attendances/manual', [AttendanceController::class, 'storeManual'])
         ->middleware('role:administrator')
         ->name('attendances.manual');

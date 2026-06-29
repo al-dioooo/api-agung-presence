@@ -2,14 +2,14 @@
 
 namespace App\Http\Resources;
 
-use App\Models\Attendance;
+use App\Models\AttendanceRequest;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * @mixin Attendance
+ * @mixin AttendanceRequest
  */
-class AttendanceResource extends JsonResource
+class AttendanceRequestResource extends JsonResource
 {
     /**
      * Transform the resource into an array.
@@ -21,22 +21,21 @@ class AttendanceResource extends JsonResource
         return [
             'id' => $this->id,
             'user_id' => $this->user_id,
-            'attendance_request_id' => $this->attendance_request_id,
-            'office_id' => $this->office_id,
-            'date' => $this->date?->format('Y-m-d'),
-            'in_at' => $this->in_at?->toIso8601String(),
-            'out_at' => $this->out_at?->toIso8601String(),
-            'in_latitude' => $this->in_latitude,
-            'in_longitude' => $this->in_longitude,
+            'type' => $this->type,
+            'start_date' => $this->start_date?->format('Y-m-d'),
+            'end_date' => $this->end_date?->format('Y-m-d'),
+            'description' => $this->description,
             'proof_photo' => $this->proof_photo,
-            'status' => $this->status,
+            'approval_status' => $this->approval_status,
+            'reviewed_by' => $this->reviewed_by,
+            'reviewed_at' => $this->reviewed_at?->toIso8601String(),
+            'rejection_reason' => $this->rejection_reason,
             'created_by' => $this->created_by,
             'updated_by' => $this->updated_by,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
             'user' => new UserResource($this->whenLoaded('user')),
-            'office' => new OfficeResource($this->whenLoaded('office')),
-            'attendance_request' => new AttendanceRequestResource($this->whenLoaded('attendanceRequest')),
+            'reviewer' => new UserResource($this->whenLoaded('reviewer')),
         ];
     }
 }

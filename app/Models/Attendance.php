@@ -14,6 +14,7 @@ class Attendance extends Model
 
     protected $fillable = [
         'user_id',
+        'attendance_request_id',
         'office_id',
         'date',
         'in_at',
@@ -41,6 +42,11 @@ class Attendance extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class)->withTrashed();
+    }
+
+    public function attendanceRequest(): BelongsTo
+    {
+        return $this->belongsTo(AttendanceRequest::class);
     }
 
     public function office(): BelongsTo

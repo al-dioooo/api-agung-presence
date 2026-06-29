@@ -9,6 +9,7 @@ enum AttendanceStatus: string
     case Absent = 'absent';
     case Sick = 'sick';
     case Leave = 'leave';
+    case Permit = 'permit';
 
     /**
      * Get a human-readable label for the status.
@@ -21,6 +22,7 @@ enum AttendanceStatus: string
             self::Absent => 'Absent',
             self::Sick => 'Sick',
             self::Leave => 'Leave',
+            self::Permit => 'Permit',
         };
     }
 }
