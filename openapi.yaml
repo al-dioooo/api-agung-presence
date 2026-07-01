@@ -8,6 +8,7 @@ servers:
 tags:
   - name: Status
   - name: Auth
+  - name: Users
   - name: Offices
   - name: Attendances
   - name: Attendance Requests
@@ -160,20 +161,121 @@ paths:
         "422":
           $ref: "#/components/responses/ValidationError"
 
+  /api/users:
+    get:
+      tags:
+        - Users
+      summary: List Users
+      description: Administrator-only user list with server-side search, role filtering, and optional bounded results for selectors.
+      operationId: listUsers
+      parameters:
+        - name: search
+          in: query
+          required: false
+          description: Search user name, username, or email.
+          schema:
+            type: string
+            maxLength: 255
+          example: maya
+        - name: role
+          in: query
+          required: false
+          description: Exact role filter.
+          schema:
+            $ref: "#/components/schemas/UserRole"
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of users to return. The API accepts values from 1 through 100.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          example: 25
+      responses:
+        "200":
+          description: Users retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserCollectionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
   /api/offices:
     get:
       tags:
         - Offices
       summary: List Offices
-      description: Employees receive only active offices. Administrators receive all offices unless `active_only=true` is passed.
+      description: Employees receive only active offices. Administrators can search, filter active status, or sort by nearest current location.
       operationId: listOffices
       parameters:
+        - name: search
+          in: query
+          required: false
+          description: Search office name or address.
+          schema:
+            type: string
+            maxLength: 255
+          example: sudirman
         - name: active_only
           in: query
           required: false
-          description: Return only active offices when true.
+          description: Return only active offices when true. Preserved for backward compatibility.
           schema:
             type: boolean
+        - name: active_status
+          in: query
+          required: false
+          description: Administrator-only active status filter. Employees remain scoped to active offices regardless of this value.
+          schema:
+            type: string
+            enum:
+              - all
+              - active
+              - inactive
+          example: active
+        - name: sort
+          in: query
+          required: false
+          description: Sort offices by name or nearest location. `nearest` requires `latitude` and `longitude`.
+          schema:
+            type: string
+            enum:
+              - name
+              - nearest
+          example: nearest
+        - name: latitude
+          in: query
+          required: false
+          description: Current latitude for nearest sorting.
+          schema:
+            type: number
+            minimum: -90
+            maximum: 90
+          example: -2.970107
+        - name: longitude
+          in: query
+          required: false
+          description: Current longitude for nearest sorting.
+          schema:
+            type: number
+            minimum: -180
+            maximum: 180
+          example: 104.740443
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of offices to return. The API accepts values from 1 through 100.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          example: 25
       responses:
         "200":
           description: Offices retrieved successfully.
@@ -183,6 +285,8 @@ paths:
                 $ref: "#/components/schemas/OfficeCollectionResponse"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "422":
+          $ref: "#/components/responses/ValidationError"
     post:
       tags:
         - Offices
@@ -1229,6 +1333,10 @@ components:
             - "null"
         is_active:
           type: boolean
+        distance_meters:
+          type: number
+          format: float
+          description: Present only when offices are requested with `sort=nearest`.
         created_by:
           type:
             - string
@@ -1469,6 +1577,19 @@ components:
           type: string
         data:
           $ref: "#/components/schemas/User"
+
+    UserCollectionResponse:
+      type: object
+      required:
+        - message
+        - data
+      properties:
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
 
     LoginSuccessResponse:
       type: object

@@ -20,6 +20,83 @@ describe('user resource authorization', function () {
             ->assertJsonCount(3, 'data');
     });
 
+    test('administrator can search users by identity fields', function () {
+        User::factory()->employee()->create([
+            'name' => 'Maya Lestari',
+            'username' => 'maya_lestari',
+            'email' => 'maya@example.com',
+        ]);
+        User::factory()->employee()->create([
+            'name' => 'Rafi Pratama',
+            'username' => 'rafi_pratama',
+            'email' => 'rafi@example.com',
+        ]);
+        $admin = User::factory()->administrator()->create();
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('users.index', ['search' => 'maya']));
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.name', 'Maya Lestari');
+    });
+
+    test('administrator can filter users by role', function () {
+        User::factory()->employee()->count(2)->create();
+        User::factory()->administrator()->create();
+        $admin = User::factory()->administrator()->create();
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('users.index', ['role' => UserRole::Employee->value]));
+
+        $response->assertOk()
+            ->assertJsonCount(2, 'data');
+
+        foreach ($response->json('data') as $user) {
+            expect($user['role'])->toBe(UserRole::Employee->value);
+        }
+    });
+
+    test('administrator can combine user search role and limit filters', function () {
+        User::factory()->employee()->create([
+            'name' => 'Dina Permata',
+            'username' => 'dina_permata',
+        ]);
+        User::factory()->employee()->create([
+            'name' => 'Dina Sari',
+            'username' => 'dina_sari',
+        ]);
+        User::factory()->administrator()->create([
+            'name' => 'Dina Admin',
+            'username' => 'dina_admin',
+        ]);
+        $admin = User::factory()->administrator()->create();
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('users.index', [
+                'search' => 'dina',
+                'role' => UserRole::Employee->value,
+                'limit' => 1,
+            ]));
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.role', UserRole::Employee->value);
+    });
+
+    test('user list validates role and limit filters', function () {
+        $admin = User::factory()->administrator()->create();
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('users.index', [
+                'role' => 'owner',
+                'limit' => 101,
+            ]));
+
+        $response->assertUnprocessable()
+            ->assertJsonValidationErrors(['role', 'limit']);
+    });
+
     test('administrator can view a user', function () {
         $employee = User::factory()->employee()->create();
         $admin = User::factory()->administrator()->create();

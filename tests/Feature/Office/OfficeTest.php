@@ -31,6 +31,24 @@ describe('index', function () {
             ->assertJsonCount(2, 'data');
     });
 
+    test('can filter active offices using string boolean query values', function () {
+        Office::factory()->count(2)->create();
+        Office::factory()->inactive()->create();
+        $admin = User::factory()->administrator()->create();
+
+        $activeOnlyResponse = $this->actingAs($admin)
+            ->getJson(route('offices.index', ['active_only' => 'true']));
+
+        $activeOnlyResponse->assertOk()
+            ->assertJsonCount(2, 'data');
+
+        $allResponse = $this->actingAs($admin)
+            ->getJson(route('offices.index', ['active_only' => 'false']));
+
+        $allResponse->assertOk()
+            ->assertJsonCount(3, 'data');
+    });
+
     test('employee only sees active offices', function () {
         Office::factory()->count(2)->create();
         Office::factory()->inactive()->create();
@@ -53,6 +71,131 @@ describe('index', function () {
 
         $response->assertOk()
             ->assertJsonCount(3, 'data');
+    });
+
+    test('can search offices by name or address', function () {
+        Office::factory()->create([
+            'name' => 'Kampus Sudirman',
+            'address' => 'Jl. Sudirman',
+        ]);
+        Office::factory()->create([
+            'name' => 'Kampus Merdeka',
+            'address' => 'Jl. Merdeka',
+        ]);
+        $admin = User::factory()->administrator()->create();
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('offices.index', ['search' => 'sudirman']));
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.name', 'Kampus Sudirman');
+    });
+
+    test('administrator can filter offices by active status', function () {
+        Office::factory()->create(['name' => 'Active Office']);
+        Office::factory()->inactive()->create(['name' => 'Inactive Office']);
+        $admin = User::factory()->administrator()->create();
+
+        $activeResponse = $this->actingAs($admin)
+            ->getJson(route('offices.index', ['active_status' => 'active']));
+
+        $activeResponse->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.name', 'Active Office')
+            ->assertJsonPath('data.0.is_active', true);
+
+        $inactiveResponse = $this->actingAs($admin)
+            ->getJson(route('offices.index', ['active_status' => 'inactive']));
+
+        $inactiveResponse->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.name', 'Inactive Office')
+            ->assertJsonPath('data.0.is_active', false);
+    });
+
+    test('employee active office scope overrides active status filters', function (string $activeStatus) {
+        Office::factory()->create();
+        Office::factory()->inactive()->create();
+        $employee = User::factory()->employee()->create();
+
+        $response = $this->actingAs($employee)
+            ->getJson(route('offices.index', ['active_status' => $activeStatus]));
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.is_active', true);
+    })->with(['all', 'inactive']);
+
+    test('can sort offices by nearest current location', function () {
+        Office::factory()->create([
+            'name' => 'Far Office',
+            'latitude' => -2.990000,
+            'longitude' => 104.760000,
+        ]);
+        Office::factory()->create([
+            'name' => 'Near Office',
+            'latitude' => -2.970100,
+            'longitude' => 104.740100,
+        ]);
+        $admin = User::factory()->administrator()->create();
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('offices.index', [
+                'sort' => 'nearest',
+                'latitude' => -2.970000,
+                'longitude' => 104.740000,
+            ]));
+
+        $response->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.name', 'Near Office')
+            ->assertJsonPath('data.1.name', 'Far Office');
+
+        expect($response->json('data.0.distance_meters'))->toBeFloat()
+            ->and($response->json('data.1.distance_meters'))->toBeFloat()
+            ->and($response->json('data.0.distance_meters'))->toBeLessThan($response->json('data.1.distance_meters'));
+    });
+
+    test('nearest office sorting applies limit after distance ordering', function () {
+        Office::factory()->create([
+            'name' => 'Far Office',
+            'latitude' => -2.990000,
+            'longitude' => 104.760000,
+        ]);
+        Office::factory()->create([
+            'name' => 'Near Office',
+            'latitude' => -2.970100,
+            'longitude' => 104.740100,
+        ]);
+        $admin = User::factory()->administrator()->create();
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('offices.index', [
+                'sort' => 'nearest',
+                'latitude' => -2.970000,
+                'longitude' => 104.740000,
+                'limit' => 1,
+            ]));
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.name', 'Near Office');
+    });
+
+    test('office filters validate active status nearest coordinates and limit', function () {
+        $admin = User::factory()->administrator()->create();
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('offices.index', [
+                'active_status' => 'archived',
+                'sort' => 'nearest',
+                'latitude' => 91,
+                'limit' => 101,
+            ]));
+
+        $response->assertUnprocessable()
+            ->assertJsonValidationErrors(['active_status', 'latitude', 'longitude', 'limit']);
     });
 
     test('unauthenticated user cannot list offices', function () {

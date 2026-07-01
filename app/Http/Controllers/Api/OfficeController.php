@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Office\ListOfficesRequest;
 use App\Http\Requests\Office\StoreOfficeRequest;
 use App\Http\Requests\Office\UpdateOfficeRequest;
 use App\Http\Resources\OfficeResource;
@@ -15,18 +16,68 @@ class OfficeController extends Controller
 {
     use ApiResponse;
 
+    private const EARTH_RADIUS_METERS = 6371000;
+
     /**
      * Display a listing of offices.
      */
-    public function index(Request $request): JsonResponse
+    public function index(ListOfficesRequest $request): JsonResponse
     {
-        $offices = Office::query()
-            ->when(
-                $request->boolean('active_only') || ! $request->user()?->isAdministrator(),
-                fn ($query) => $query->where('is_active', true)
-            )
-            ->orderBy('name')
-            ->get();
+        $query = Office::query();
+
+        if ($request->boolean('active_only') || ! $request->user()?->isAdministrator()) {
+            $query->where('is_active', true);
+        } elseif ($request->filled('active_status')) {
+            $activeStatus = $request->validated('active_status');
+
+            if ($activeStatus === 'active') {
+                $query->where('is_active', true);
+            } elseif ($activeStatus === 'inactive') {
+                $query->where('is_active', false);
+            }
+        }
+
+        if ($request->filled('search')) {
+            $search = (string) $request->string('search')->trim();
+            $query->where(function ($query) use ($search): void {
+                $query
+                    ->where('name', 'like', "%{$search}%")
+                    ->orWhere('address', 'like', "%{$search}%");
+            });
+        }
+
+        $limit = $request->filled('limit') ? $request->integer('limit') : null;
+
+        if ($request->validated('sort') === 'nearest') {
+            $latitude = (float) $request->validated('latitude');
+            $longitude = (float) $request->validated('longitude');
+            $offices = $query
+                ->get()
+                ->map(function (Office $office) use ($latitude, $longitude): Office {
+                    $office->setAttribute('distance_meters', $this->distanceInMeters(
+                        $latitude,
+                        $longitude,
+                        (float) $office->latitude,
+                        (float) $office->longitude,
+                    ));
+
+                    return $office;
+                })
+                ->sortBy('distance_meters')
+                ->values();
+
+            if ($limit !== null) {
+                $offices = $offices->take($limit)->values();
+            }
+        } else {
+            $query->orderBy('name');
+
+            if ($limit !== null) {
+                $query->limit($limit);
+            }
+
+            $offices = $query->get();
+        }
 
         return $this->success('Offices retrieved successfully.', OfficeResource::collection($offices));
     }
@@ -81,5 +132,18 @@ class OfficeController extends Controller
         $office->delete();
 
         return $this->success('Office deleted successfully.');
+    }
+
+    private function distanceInMeters(float $fromLatitude, float $fromLongitude, float $toLatitude, float $toLongitude): float
+    {
+        $fromLatitudeRadians = deg2rad($fromLatitude);
+        $toLatitudeRadians = deg2rad($toLatitude);
+        $latitudeDelta = deg2rad($toLatitude - $fromLatitude);
+        $longitudeDelta = deg2rad($toLongitude - $fromLongitude);
+
+        $angle = sin($latitudeDelta / 2) ** 2
+            + cos($fromLatitudeRadians) * cos($toLatitudeRadians) * sin($longitudeDelta / 2) ** 2;
+
+        return self::EARTH_RADIUS_METERS * 2 * atan2(sqrt($angle), sqrt(1 - $angle));
     }
 }

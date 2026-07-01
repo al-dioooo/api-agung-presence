@@ -29,6 +29,10 @@ class OfficeResource extends JsonResource
             'work_end_time' => $this->formatTime($this->work_end_time),
             'photo' => $this->photo,
             'is_active' => $this->is_active,
+            'distance_meters' => $this->when(
+                array_key_exists('distance_meters', $this->resource->getAttributes()),
+                fn () => round((float) $this->distance_meters, 2),
+            ),
             'created_by' => $this->created_by,
             'updated_by' => $this->updated_by,
             'created_at' => $this->created_at,

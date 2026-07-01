@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\User\ListUsersRequest;
 use App\Http\Requests\User\UpdateUserRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
@@ -18,16 +19,25 @@ class UserController extends Controller
      * List all users (employees). Accessible by authenticated users;
      * administrators see all, employees see their own team.
      */
-    public function index(Request $request): JsonResponse
+    public function index(ListUsersRequest $request): JsonResponse
     {
         $query = User::query()->orderBy('name');
 
-        if ($request->has('search')) {
-            $search = $request->string('search')->trim();
+        if ($request->filled('search')) {
+            $search = (string) $request->string('search')->trim();
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('username', 'like', "%{$search}%");
+                    ->orWhere('username', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
             });
+        }
+
+        if ($request->filled('role')) {
+            $query->where('role', $request->validated('role'));
+        }
+
+        if ($request->filled('limit')) {
+            $query->limit($request->integer('limit'));
         }
 
         return $this->success(
