@@ -11,10 +11,12 @@ use App\Http\Requests\Attendance\UpdateAttendanceRequest;
 use App\Http\Resources\AttendanceResource;
 use App\Models\Attendance;
 use App\Models\Office;
+use App\Support\AttendanceWorkdays;
 use App\Traits\ApiResponse;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class AttendanceController extends Controller
 {
@@ -101,42 +103,85 @@ class AttendanceController extends Controller
     }
 
     /**
-     * Store or replace a manual sick or leave attendance record.
+     * Store or replace manual sick, leave, or permit attendance records.
      */
     public function storeManual(StoreManualAttendanceRequest $request): JsonResponse
     {
         $data = $request->validated();
+        $username = $request->user()?->username;
+
+        if (isset($data['start_date'], $data['end_date'])) {
+            $attendances = DB::transaction(function () use ($data, $username) {
+                return collect(AttendanceWorkdays::dates($data['start_date'], $data['end_date']))
+                    ->map(function (CarbonImmutable $date) use ($data, $username): Attendance {
+                        [$attendance] = $this->storeManualAttendanceForDate(
+                            (int) $data['user_id'],
+                            $date->toDateString(),
+                            AttendanceStatus::from($data['status']),
+                            $username,
+                        );
+
+                        return $attendance;
+                    });
+            });
+
+            return $this->success('Manual attendances stored successfully.', AttendanceResource::collection($attendances));
+        }
+
+        [$attendance, $created] = $this->storeManualAttendanceForDate(
+            (int) $data['user_id'],
+            $data['date'],
+            AttendanceStatus::from($data['status']),
+            $username,
+        );
+
+        return $this->success(
+            $created ? 'Manual attendance created successfully.' : 'Manual attendance updated successfully.',
+            new AttendanceResource($attendance),
+            $created ? 201 : 200,
+        );
+    }
+
+    /**
+     * @return array{0: Attendance, 1: bool}
+     */
+    private function storeManualAttendanceForDate(
+        int $userId,
+        string $date,
+        AttendanceStatus $status,
+        ?string $username,
+    ): array {
         $attendance = Attendance::query()
-            ->where('user_id', $data['user_id'])
-            ->whereDate('date', $data['date'])
+            ->where('user_id', $userId)
+            ->whereDate('date', $date)
             ->first();
 
         $manualData = [
             'office_id' => null,
             'attendance_request_id' => null,
-            'date' => $data['date'],
+            'date' => $date,
             'in_at' => null,
             'out_at' => null,
             'in_latitude' => null,
             'in_longitude' => null,
             'proof_photo' => null,
-            'status' => AttendanceStatus::from($data['status']),
-            'updated_by' => $request->user()?->username,
+            'status' => $status,
+            'updated_by' => $username,
         ];
 
         if ($attendance) {
             $attendance->update($manualData);
 
-            return $this->success('Manual attendance updated successfully.', new AttendanceResource($attendance->fresh(['user', 'office'])));
+            return [$attendance->fresh(['user', 'office']), false];
         }
 
         $attendance = Attendance::create([
             ...$manualData,
-            'user_id' => $data['user_id'],
-            'created_by' => $request->user()?->username,
+            'user_id' => $userId,
+            'created_by' => $username,
         ]);
 
-        return $this->success('Manual attendance created successfully.', new AttendanceResource($attendance->load(['user', 'office'])), 201);
+        return [$attendance->load(['user', 'office']), true];
     }
 
     /**

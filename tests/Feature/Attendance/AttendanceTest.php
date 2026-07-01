@@ -741,6 +741,88 @@ describe('manual store', function () {
             ->where('created_by', $admin->username)
             ->exists())->toBeTrue();
     });
+
+    test('administrator can bulk create manual attendance for a workday date range', function () {
+        $admin = User::factory()->administrator()->create();
+        $employee = User::factory()->employee()->create();
+        $office = Office::factory()->create();
+        $existingAttendance = Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'office_id' => $office->id,
+            'date' => '2026-06-06',
+            'in_at' => '2026-06-06 08:00:00',
+            'out_at' => '2026-06-06 17:00:00',
+            'in_latitude' => -2.965107,
+            'in_longitude' => 104.736443,
+            'proof_photo' => 'data:image/png;base64,abc',
+            'status' => AttendanceStatus::OnTime,
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->postJson(route('attendances.manual'), [
+                'user_id' => $employee->id,
+                'start_date' => '2026-06-05',
+                'end_date' => '2026-06-08',
+                'status' => AttendanceStatus::Permit->value,
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('message', 'Manual attendances stored successfully.')
+            ->assertJsonCount(3, 'data')
+            ->assertJsonPath('data.0.date', '2026-06-05')
+            ->assertJsonPath('data.1.id', $existingAttendance->id)
+            ->assertJsonPath('data.1.date', '2026-06-06')
+            ->assertJsonPath('data.2.date', '2026-06-08');
+
+        foreach (['2026-06-05', '2026-06-06', '2026-06-08'] as $date) {
+            $attendance = Attendance::query()
+                ->where('user_id', $employee->id)
+                ->whereDate('date', $date)
+                ->first();
+
+            expect($attendance)
+                ->not->toBeNull()
+                ->and($attendance->status)->toBe(AttendanceStatus::Permit)
+                ->and($attendance->office_id)->toBeNull()
+                ->and($attendance->in_at)->toBeNull()
+                ->and($attendance->out_at)->toBeNull()
+                ->and($attendance->in_latitude)->toBeNull()
+                ->and($attendance->in_longitude)->toBeNull()
+                ->and($attendance->proof_photo)->toBeNull();
+        }
+
+        $this->assertDatabaseMissing('attendances', [
+            'user_id' => $employee->id,
+            'date' => '2026-06-07',
+        ]);
+    });
+
+    test('manual bulk attendance validates date range inputs', function () {
+        $admin = User::factory()->administrator()->create();
+        $employee = User::factory()->employee()->create();
+
+        $response = $this->actingAs($admin)
+            ->postJson(route('attendances.manual'), [
+                'user_id' => $employee->id,
+                'start_date' => '2026-06-08',
+                'end_date' => '2026-06-05',
+                'status' => AttendanceStatus::Sick->value,
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonValidationErrors(['end_date']);
+
+        $sundayResponse = $this->actingAs($admin)
+            ->postJson(route('attendances.manual'), [
+                'user_id' => $employee->id,
+                'start_date' => '2026-06-07',
+                'end_date' => '2026-06-07',
+                'status' => AttendanceStatus::Sick->value,
+            ]);
+
+        $sundayResponse->assertUnprocessable()
+            ->assertJsonValidationErrors(['start_date']);
+    });
 });
 
 describe('show', function () {

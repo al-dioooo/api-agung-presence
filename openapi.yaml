@@ -647,7 +647,7 @@ paths:
       tags:
         - Attendances
       summary: Manual Attendance
-      description: Administrator-only endpoint for direct manual Sakit, Cuti, or Izin attendance records.
+      description: Administrator-only endpoint for direct manual Sakit, Cuti, or Izin attendance records. Send `date` for one day, or `start_date` and `end_date` for bulk workday input.
       operationId: manualAttendance
       requestBody:
         required: true
@@ -657,17 +657,27 @@ paths:
               $ref: "#/components/schemas/StoreManualAttendanceRequest"
             examples:
               permit:
+                summary: Single day
                 value:
                   user_id: 1
                   date: "2026-06-01"
                   status: permit
+              leaveRange:
+                summary: Date range
+                value:
+                  user_id: 1
+                  start_date: "2026-06-01"
+                  end_date: "2026-06-05"
+                  status: leave
       responses:
         "200":
-          description: Manual attendance updated successfully.
+          description: Manual attendance updated successfully, or range attendance stored successfully.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AttendanceResponse"
+                oneOf:
+                  - $ref: "#/components/schemas/AttendanceResponse"
+                  - $ref: "#/components/schemas/AttendanceCollectionResponse"
         "201":
           description: Manual attendance created successfully.
           content:
@@ -1175,7 +1185,6 @@ components:
       type: object
       required:
         - user_id
-        - date
         - status
       properties:
         user_id:
@@ -1184,6 +1193,15 @@ components:
         date:
           type: string
           format: date
+          description: Required for single-day manual input. Do not combine with start_date/end_date.
+        start_date:
+          type: string
+          format: date
+          description: Required with end_date for bulk manual input. Do not combine with date.
+        end_date:
+          type: string
+          format: date
+          description: Required with start_date for bulk manual input. Must be after or equal to start_date.
         status:
           type: string
           enum:
