@@ -222,3 +222,9 @@ Every API endpoint **must** return this structure:
 - Use factory states (e.g., `->administrator()`, `->employee()`) instead of manual attribute overrides.
 - For logout/token tests, use real Sanctum tokens via `$user->createToken()` + `$this->withToken()`, not `actingAs()`.
 - Assert the uniform response structure (`data.*` paths).
+
+## Commit Rules
+
+- Follow conventional commit rules.
+- Use listing for description.
+- Do not separate the description item by whitespace.
