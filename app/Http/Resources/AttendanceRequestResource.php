@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\AttendanceRequest;
+use App\Support\AttendanceWorkdays;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -24,6 +25,7 @@ class AttendanceRequestResource extends JsonResource
             'type' => $this->type,
             'start_date' => $this->start_date?->format('Y-m-d'),
             'end_date' => $this->end_date?->format('Y-m-d'),
+            'workday_count' => AttendanceWorkdays::count($this->start_date, $this->end_date),
             'description' => $this->description,
             'proof_photo' => $this->proof_photo,
             'approval_status' => $this->approval_status,

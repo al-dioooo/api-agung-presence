@@ -1,7 +1,9 @@
 <?php
 
+use App\Enums\AttendanceRequestStatus;
 use App\Enums\AttendanceStatus;
 use App\Models\Attendance;
+use App\Models\AttendanceRequest;
 use App\Models\User;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 
@@ -93,6 +95,47 @@ describe('summary', function () {
             ->assertJsonPath('data.0.total_real_check_ins', 1)
             ->assertJsonPath('data.0.first_attendance_date', '2026-06-10')
             ->assertJsonPath('data.0.latest_attendance_date', '2026-06-10');
+    });
+
+    test('summary counts multi day approved requests by Monday through Saturday workdays', function () {
+        $admin = User::factory()->administrator()->create();
+        $employee = User::factory()->employee()->create([
+            'name' => 'Fitri Lestari',
+            'username' => 'fitri',
+            'email' => 'fitri@example.com',
+        ]);
+        $attendanceRequest = AttendanceRequest::factory()->create([
+            'user_id' => $employee->id,
+            'type' => AttendanceStatus::Permit,
+            'start_date' => '2026-06-05',
+            'end_date' => '2026-06-08',
+        ]);
+
+        $this->actingAs($admin)
+            ->patchJson(route('attendance-requests.review', $attendanceRequest), [
+                'approval_status' => AttendanceRequestStatus::Approved->value,
+            ])
+            ->assertOk();
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('attendances.summary', [
+                'user_id' => $employee->id,
+                'status' => AttendanceStatus::Permit->value,
+                'start_date' => '2026-06-05',
+                'end_date' => '2026-06-08',
+            ]));
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.user_id', $employee->id)
+            ->assertJsonPath('data.0.permit_count', 3)
+            ->assertJsonPath('data.0.first_attendance_date', '2026-06-05')
+            ->assertJsonPath('data.0.latest_attendance_date', '2026-06-08');
+
+        expect(Attendance::query()
+            ->where('attendance_request_id', $attendanceRequest->id)
+            ->whereDate('date', '2026-06-07')
+            ->exists())->toBeFalse();
     });
 
     test('summary is administrator only', function () {

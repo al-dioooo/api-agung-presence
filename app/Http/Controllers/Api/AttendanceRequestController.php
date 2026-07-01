@@ -10,8 +10,8 @@ use App\Http\Requests\Attendance\StoreAttendanceApplicationRequest;
 use App\Http\Resources\AttendanceRequestResource;
 use App\Models\Attendance;
 use App\Models\AttendanceRequest;
+use App\Support\AttendanceWorkdays;
 use App\Traits\ApiResponse;
-use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -145,10 +145,7 @@ class AttendanceRequestController extends Controller
 
     private function materializeApprovedRequest(AttendanceRequest $attendanceRequest, string $reviewerUsername): void
     {
-        $cursor = CarbonImmutable::parse($attendanceRequest->start_date);
-        $endDate = CarbonImmutable::parse($attendanceRequest->end_date);
-
-        while ($cursor->lte($endDate)) {
+        foreach (AttendanceWorkdays::dates($attendanceRequest->start_date, $attendanceRequest->end_date) as $cursor) {
             $attendance = Attendance::query()
                 ->where('user_id', $attendanceRequest->user_id)
                 ->whereDate('date', $cursor->toDateString())
@@ -180,8 +177,6 @@ class AttendanceRequestController extends Controller
                     'created_by' => $reviewerUsername,
                 ]);
             }
-
-            $cursor = $cursor->addDay();
         }
     }
 }

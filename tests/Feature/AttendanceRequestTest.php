@@ -64,6 +64,7 @@ describe('store', function () {
             ->assertJsonPath('data.type', AttendanceStatus::Permit->value)
             ->assertJsonPath('data.start_date', '2026-06-01')
             ->assertJsonPath('data.end_date', '2026-06-03')
+            ->assertJsonPath('data.workday_count', 3)
             ->assertJsonPath('data.approval_status', AttendanceRequestStatus::Pending->value)
             ->assertJsonPath('data.created_by', $employee->username);
 
@@ -185,14 +186,14 @@ describe('show', function () {
 });
 
 describe('review', function () {
-    test('administrator can approve an attendance request and create one attendance per date', function () {
+    test('administrator can approve an attendance request and create one attendance per workday', function () {
         $admin = User::factory()->administrator()->create();
         $employee = User::factory()->employee()->create();
         $attendanceRequest = AttendanceRequest::factory()->create([
             'user_id' => $employee->id,
             'type' => AttendanceStatus::Permit,
-            'start_date' => '2026-06-01',
-            'end_date' => '2026-06-03',
+            'start_date' => '2026-06-05',
+            'end_date' => '2026-06-08',
             'proof_photo' => proofPhoto(),
         ]);
 
@@ -204,13 +205,14 @@ describe('review', function () {
         $response->assertOk()
             ->assertJsonPath('message', 'Attendance request approved successfully.')
             ->assertJsonPath('data.approval_status', AttendanceRequestStatus::Approved->value)
+            ->assertJsonPath('data.workday_count', 3)
             ->assertJsonPath('data.reviewed_by', $admin->id);
 
         expect(Attendance::query()
             ->where('attendance_request_id', $attendanceRequest->id)
             ->count())->toBe(3);
 
-        foreach (['2026-06-01', '2026-06-02', '2026-06-03'] as $date) {
+        foreach (['2026-06-05', '2026-06-06', '2026-06-08'] as $date) {
             expect(Attendance::query()
                 ->where('attendance_request_id', $attendanceRequest->id)
                 ->where('user_id', $employee->id)
@@ -221,6 +223,11 @@ describe('review', function () {
                 ->where('created_by', $admin->username)
                 ->exists())->toBeTrue();
         }
+
+        expect(Attendance::query()
+            ->where('attendance_request_id', $attendanceRequest->id)
+            ->whereDate('date', '2026-06-07')
+            ->exists())->toBeFalse();
     });
 
     test('administrator approval updates existing non-real attendance instead of duplicating', function () {
@@ -375,6 +382,7 @@ describe('review', function () {
             ->assertOk()
             ->assertJsonPath('data.attendance_request.id', $attendanceRequest->id)
             ->assertJsonPath('data.attendance_request.description', 'Demam.')
+            ->assertJsonPath('data.attendance_request.workday_count', 1)
             ->assertJsonPath('data.attendance_request.reviewed_by', $admin->id);
     });
 });

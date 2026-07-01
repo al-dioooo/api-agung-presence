@@ -193,6 +193,52 @@ describe('export', function () {
             ->and($summary->getCell('F2')->getValue())->toBe(1);
     });
 
+    test('export counts multi day approved requests by Monday through Saturday workdays', function () {
+        $admin = User::factory()->administrator()->create();
+        $employee = User::factory()->employee()->create([
+            'name' => 'Rina Permata',
+            'username' => 'rina',
+            'email' => 'rina@example.com',
+        ]);
+        $attendanceRequest = AttendanceRequest::factory()->create([
+            'user_id' => $employee->id,
+            'type' => AttendanceStatus::Leave,
+            'start_date' => '2026-06-05',
+            'end_date' => '2026-06-08',
+            'description' => 'Cuti keluarga.',
+        ]);
+
+        $this->actingAs($admin)
+            ->patchJson(route('attendance-requests.review', $attendanceRequest), [
+                'approval_status' => AttendanceRequestStatus::Approved->value,
+            ])
+            ->assertOk();
+
+        $response = $this->actingAs($admin)
+            ->get(route('attendances.export', [
+                'user_id' => $employee->id,
+                'status' => AttendanceStatus::Leave->value,
+                'start_date' => '2026-06-05',
+                'end_date' => '2026-06-08',
+            ]));
+
+        $response->assertOk();
+
+        $spreadsheet = workbookFromResponseContent($response->getContent());
+        $detail = $spreadsheet->getSheetByName('Rekap Absensi');
+        $summary = $spreadsheet->getSheetByName('Total Kehadiran');
+
+        expect($detail->getHighestRow())->toBe(4)
+            ->and($detail->rangeToArray('D2:D4'))->toBe([
+                ['2026-06-05'],
+                ['2026-06-06'],
+                ['2026-06-08'],
+            ])
+            ->and($detail->getCell('E2')->getValue())->toBe('Cuti')
+            ->and($detail->getAutoFilter()->getRange())->toBe('A1:R4')
+            ->and($summary->getCell('H2')->getValue())->toBe(3);
+    });
+
     test('export handles roughly five hundred filtered rows', function () {
         $admin = User::factory()->administrator()->create();
         $employee = User::factory()->employee()->create();

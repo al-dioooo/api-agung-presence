@@ -397,7 +397,7 @@ paths:
       tags:
         - Attendance Requests
       summary: Review Request
-      description: Administrator-only endpoint. Approval creates attendance rows for the request date range; rejection requires a reason.
+      description: Administrator-only endpoint. Approval creates attendance rows for Monday-Saturday workdays in the request date range; rejection requires a reason.
       operationId: reviewAttendanceRequest
       requestBody:
         required: true
@@ -1339,6 +1339,7 @@ components:
         - type
         - start_date
         - end_date
+        - workday_count
         - description
         - proof_photo
         - approval_status
@@ -1361,6 +1362,10 @@ components:
         end_date:
           type: string
           format: date
+        workday_count:
+          type: integer
+          minimum: 0
+          description: Inclusive Monday-Saturday day count for the request date range.
         description:
           type: string
         proof_photo:
