@@ -434,8 +434,16 @@ paths:
       tags:
         - Attendances
       summary: List Attendances
-      description: Administrators receive all attendances. Employees receive only their own attendances.
+      description: Administrators receive all matching attendances. Employees receive only their own matching attendances.
       operationId: listAttendances
+      parameters:
+        - $ref: "#/components/parameters/AttendanceSearch"
+        - $ref: "#/components/parameters/AttendanceUserIdQuery"
+        - $ref: "#/components/parameters/AttendanceStatusQuery"
+        - $ref: "#/components/parameters/AttendanceOfficeIdQuery"
+        - $ref: "#/components/parameters/AttendanceDate"
+        - $ref: "#/components/parameters/AttendanceStartDate"
+        - $ref: "#/components/parameters/AttendanceEndDate"
       responses:
         "200":
           description: Attendances retrieved successfully.
@@ -480,8 +488,16 @@ paths:
       tags:
         - Attendances
       summary: Attendance Summary
-      description: Administrator-only per-employee totals. `total_real_check_ins` counts only `on_time` and `late`.
+      description: Administrator-only per-employee totals for matching attendance rows. `total_real_check_ins` counts only `on_time` and `late`.
       operationId: attendanceSummary
+      parameters:
+        - $ref: "#/components/parameters/AttendanceSearch"
+        - $ref: "#/components/parameters/AttendanceUserIdQuery"
+        - $ref: "#/components/parameters/AttendanceStatusQuery"
+        - $ref: "#/components/parameters/AttendanceOfficeIdQuery"
+        - $ref: "#/components/parameters/AttendanceDate"
+        - $ref: "#/components/parameters/AttendanceStartDate"
+        - $ref: "#/components/parameters/AttendanceEndDate"
       responses:
         "200":
           description: Attendance summary retrieved successfully.
@@ -499,8 +515,16 @@ paths:
       tags:
         - Attendances
       summary: Export Attendances
-      description: Administrator-only XLSX recap export. This endpoint ignores UI filters.
+      description: Administrator-only XLSX recap export for matching attendance rows. The workbook includes detail and summary sheets, Excel filters, and embedded proof-photo thumbnails when valid proof photos are available.
       operationId: exportAttendances
+      parameters:
+        - $ref: "#/components/parameters/AttendanceSearch"
+        - $ref: "#/components/parameters/AttendanceUserIdQuery"
+        - $ref: "#/components/parameters/AttendanceStatusQuery"
+        - $ref: "#/components/parameters/AttendanceOfficeIdQuery"
+        - $ref: "#/components/parameters/AttendanceDate"
+        - $ref: "#/components/parameters/AttendanceStartDate"
+        - $ref: "#/components/parameters/AttendanceEndDate"
       responses:
         "200":
           description: XLSX workbook with attendance detail and totals.
@@ -706,6 +730,67 @@ components:
       schema:
         type: integer
         format: int64
+    AttendanceSearch:
+      name: search
+      in: query
+      required: false
+      description: Search date, raw status, status label, office name/address, employee name, username, or email.
+      schema:
+        type: string
+        maxLength: 255
+      example: terlambat
+    AttendanceUserIdQuery:
+      name: user_id
+      in: query
+      required: false
+      description: Employee ID filter. Administrators can filter any employee; employee users remain scoped to themselves.
+      schema:
+        type: integer
+        format: int64
+      example: 1
+    AttendanceStatusQuery:
+      name: status
+      in: query
+      required: false
+      description: Attendance status filter.
+      schema:
+        $ref: "#/components/schemas/AttendanceStatus"
+    AttendanceOfficeIdQuery:
+      name: office_id
+      in: query
+      required: false
+      description: Office ID filter.
+      schema:
+        type: integer
+        format: int64
+      example: 1
+    AttendanceDate:
+      name: date
+      in: query
+      required: false
+      description: Exact attendance date filter in `YYYY-MM-DD` format.
+      schema:
+        type: string
+        format: date
+      example: "2026-06-10"
+    AttendanceStartDate:
+      name: start_date
+      in: query
+      required: false
+      description: Inclusive start date filter in `YYYY-MM-DD` format.
+      schema:
+        type: string
+        format: date
+      example: "2026-06-01"
+    AttendanceEndDate:
+      name: end_date
+      in: query
+      required: false
+      description: Inclusive end date filter in `YYYY-MM-DD` format. Must be after or equal to `start_date` when both are provided.
+      schema:
+        type: string
+        format: date
+      example: "2026-06-30"
   responses:
     Unauthenticated:
       description: Unauthenticated.

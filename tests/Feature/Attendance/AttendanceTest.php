@@ -77,6 +77,7 @@ describe('index', function () {
 
         $response = $this->actingAs($employee)
             ->getJson(route('attendances.index', [
+                'user_id' => $otherUser->id,
                 'office_id' => $office->id,
                 'date' => '2026-05-28',
             ]));
@@ -84,6 +85,78 @@ describe('index', function () {
         $response->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.user_id', $employee->id);
+    });
+
+    test('administrator can combine employee status office date range and search filters', function () {
+        $admin = User::factory()->administrator()->create();
+        $employee = User::factory()->employee()->create([
+            'name' => 'Maya Lestari',
+            'username' => 'maya_lestari',
+            'email' => 'maya@example.com',
+        ]);
+        $otherEmployee = User::factory()->employee()->create([
+            'name' => 'Rafi Pratama',
+        ]);
+        $office = Office::factory()->create(['name' => 'Kampus Sudirman']);
+        $otherOffice = Office::factory()->create(['name' => 'Kampus Merdeka']);
+
+        Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'office_id' => $office->id,
+            'date' => '2026-06-10',
+            'in_at' => '2026-06-10 08:10:00',
+            'status' => AttendanceStatus::Late,
+        ]);
+        Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'office_id' => $office->id,
+            'date' => '2026-06-11',
+            'in_at' => '2026-06-11 08:00:00',
+            'status' => AttendanceStatus::OnTime,
+        ]);
+        Attendance::factory()->create([
+            'user_id' => $otherEmployee->id,
+            'office_id' => $office->id,
+            'date' => '2026-06-10',
+            'status' => AttendanceStatus::Late,
+        ]);
+        Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'office_id' => $otherOffice->id,
+            'date' => '2026-06-10',
+            'status' => AttendanceStatus::Late,
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('attendances.index', [
+                'search' => 'maya',
+                'user_id' => $employee->id,
+                'status' => AttendanceStatus::Late->value,
+                'office_id' => $office->id,
+                'start_date' => '2026-06-10',
+                'end_date' => '2026-06-10',
+            ]));
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.user_id', $employee->id)
+            ->assertJsonPath('data.0.office_id', $office->id)
+            ->assertJsonPath('data.0.status', AttendanceStatus::Late->value)
+            ->assertJsonPath('data.0.date', '2026-06-10');
+    });
+
+    test('attendance filters validate invalid status and date range', function () {
+        $admin = User::factory()->administrator()->create();
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('attendances.index', [
+                'status' => 'holiday',
+                'start_date' => '2026-06-10',
+                'end_date' => '2026-06-01',
+            ]));
+
+        $response->assertUnprocessable()
+            ->assertJsonValidationErrors(['status', 'end_date']);
     });
 
     test('can filter attendances by office and date', function () {

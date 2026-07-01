@@ -3,18 +3,20 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Attendance\FilterAttendanceRequest;
 use App\Support\AttendanceRecapExporter;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Carbon;
 use Symfony\Component\HttpFoundation\Response;
 
 class AttendanceReportController extends Controller
 {
     use ApiResponse;
 
-    public function summary(AttendanceRecapExporter $exporter): JsonResponse
+    public function summary(FilterAttendanceRequest $request, AttendanceRecapExporter $exporter): JsonResponse
     {
-        $summary = $exporter->employeeSummaryQuery()
+        $summary = $exporter->employeeSummaryQuery($request->toFilter(), $request->user())
             ->get()
             ->map(fn ($employee) => [
                 'user_id' => $employee->id,
@@ -28,20 +30,25 @@ class AttendanceReportController extends Controller
                 'leave_count' => $employee->leave_count,
                 'permit_count' => $employee->permit_count,
                 'absent_count' => $employee->absent_count,
-                'first_attendance_date' => $employee->first_attendance_date,
-                'latest_attendance_date' => $employee->latest_attendance_date,
+                'first_attendance_date' => $this->formatDate($employee->first_attendance_date),
+                'latest_attendance_date' => $this->formatDate($employee->latest_attendance_date),
             ]);
 
         return $this->success('Attendance summary retrieved successfully.', $summary);
     }
 
-    public function export(AttendanceRecapExporter $exporter): Response
+    public function export(FilterAttendanceRequest $request, AttendanceRecapExporter $exporter): Response
     {
         $filename = 'attendance-recap-'.now()->format('Ymd-His').'.xlsx';
 
-        return response($exporter->build(), 200, [
+        return response($exporter->build($request->toFilter(), $request->user()), 200, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'Content-Disposition' => 'attachment; filename="'.$filename.'"',
         ]);
+    }
+
+    private function formatDate(mixed $date): ?string
+    {
+        return $date ? Carbon::parse($date)->format('Y-m-d') : null;
     }
 }

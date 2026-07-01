@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\AttendanceStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Attendance\FilterAttendanceRequest;
 use App\Http\Requests\Attendance\StoreAttendanceRequest;
 use App\Http\Requests\Attendance\StoreManualAttendanceRequest;
 use App\Http\Requests\Attendance\UpdateAttendanceRequest;
@@ -24,24 +25,13 @@ class AttendanceController extends Controller
     /**
      * Display a listing of the attendances.
      */
-    public function index(Request $request): JsonResponse
+    public function index(FilterAttendanceRequest $request): JsonResponse
     {
-        $request->validate([
-            'start_date' => ['sometimes', 'date', 'date_format:Y-m-d'],
-            'end_date' => ['sometimes', 'date', 'date_format:Y-m-d'],
-        ]);
-
         $query = Attendance::with(['user', 'office', 'attendanceRequest.user', 'attendanceRequest.reviewer'])
-            ->when($request->filled('office_id'), fn ($query) => $query->where('office_id', $request->integer('office_id')))
-            ->when($request->filled('date'), fn ($query) => $query->whereDate('date', $request->date('date')))
-            ->when($request->filled('start_date'), fn ($query) => $query->whereDate('date', '>=', $request->date('start_date')))
-            ->when($request->filled('end_date'), fn ($query) => $query->whereDate('date', '<=', $request->date('end_date')))
             ->orderByDesc('date')
             ->orderByDesc('in_at');
 
-        if (! $request->user()?->isAdministrator()) {
-            $query->where('user_id', $request->user()?->id);
-        }
+        $request->toFilter()->apply($query, $request->user());
 
         return $this->success('Attendances retrieved successfully.', AttendanceResource::collection($query->get()));
     }
