@@ -7,6 +7,7 @@ use App\Models\AttendanceRequest;
 use App\Models\Office;
 use App\Models\User;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Carbon;
 
 uses(LazilyRefreshDatabase::class);
 
@@ -14,6 +15,10 @@ function proofPhoto(): string
 {
     return 'data:image/png;base64,'.base64_encode('proof');
 }
+
+afterEach(function () {
+    Carbon::setTestNow();
+});
 
 describe('index', function () {
     test('administrator can list all attendance requests', function () {
@@ -154,6 +159,38 @@ describe('store', function () {
         $response->assertUnprocessable()
             ->assertJsonValidationErrors(['start_date']);
     });
+
+    test('sick request cannot start after today but can end in the future', function () {
+        Carbon::setTestNow(Carbon::parse('2026-06-10 08:00:00', 'Asia/Jakarta'));
+        $employee = User::factory()->employee()->create();
+
+        $futureStartResponse = $this->actingAs($employee)
+            ->postJson(route('attendance-requests.store'), [
+                'type' => AttendanceStatus::Sick->value,
+                'start_date' => '2026-06-11',
+                'end_date' => '2026-06-12',
+                'description' => 'Sakit.',
+                'proof_photo' => proofPhoto(),
+            ]);
+
+        $futureStartResponse->assertUnprocessable()
+            ->assertJsonValidationErrors(['start_date']);
+
+        $todayStartResponse = $this->actingAs($employee)
+            ->postJson(route('attendance-requests.store'), [
+                'type' => AttendanceStatus::Sick->value,
+                'start_date' => '2026-06-10',
+                'end_date' => '2026-06-12',
+                'description' => 'Sakit.',
+                'proof_photo' => proofPhoto(),
+            ]);
+
+        $todayStartResponse->assertCreated()
+            ->assertJsonPath('data.start_date', '2026-06-10')
+            ->assertJsonPath('data.end_date', '2026-06-12');
+
+        Carbon::setTestNow();
+    });
 });
 
 describe('show', function () {
@@ -267,6 +304,43 @@ describe('review', function () {
             'status' => AttendanceStatus::Leave->value,
             'updated_by' => $admin->username,
         ]);
+    });
+
+    test('administrator approval only materializes arrived request dates', function () {
+        Carbon::setTestNow(Carbon::parse('2026-06-10 12:00:00', 'Asia/Jakarta'));
+        $admin = User::factory()->administrator()->create();
+        $employee = User::factory()->employee()->create();
+        $attendanceRequest = AttendanceRequest::factory()->create([
+            'user_id' => $employee->id,
+            'type' => AttendanceStatus::Permit,
+            'start_date' => '2026-06-10',
+            'end_date' => '2026-06-12',
+            'proof_photo' => proofPhoto(),
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->patchJson(route('attendance-requests.review', $attendanceRequest), [
+                'approval_status' => AttendanceRequestStatus::Approved->value,
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('data.workday_count', 3);
+
+        expect(Attendance::query()
+            ->where('attendance_request_id', $attendanceRequest->id)
+            ->count())->toBe(1);
+
+        expect(Attendance::query()
+            ->where('attendance_request_id', $attendanceRequest->id)
+            ->whereDate('date', '2026-06-10')
+            ->where('status', AttendanceStatus::Permit->value)
+            ->exists())->toBeTrue()
+            ->and(Attendance::query()
+                ->where('attendance_request_id', $attendanceRequest->id)
+                ->whereDate('date', '2026-06-11')
+                ->exists())->toBeFalse();
+
+        Carbon::setTestNow();
     });
 
     test('administrator can reject an attendance request with a reason', function () {

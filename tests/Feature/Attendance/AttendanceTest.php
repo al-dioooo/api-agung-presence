@@ -258,6 +258,43 @@ describe('index', function () {
 
         $response->assertUnauthorized();
     });
+
+    test('administrator date filter includes virtual absent rows for missing employees', function () {
+        $admin = User::factory()->administrator()->create();
+        $missingEmployee = User::factory()->employee()->create([
+            'name' => 'Missing Employee',
+            'created_at' => '2026-06-01 08:00:00',
+        ]);
+        $futureEmployee = User::factory()->employee()->create([
+            'created_at' => '2026-06-11 08:00:00',
+        ]);
+        $presentEmployee = User::factory()->employee()->create([
+            'created_at' => '2026-06-01 08:00:00',
+        ]);
+        $office = Office::factory()->create();
+
+        Attendance::factory()->create([
+            'user_id' => $presentEmployee->id,
+            'office_id' => $office->id,
+            'date' => '2026-06-10',
+            'in_at' => '2026-06-10 08:00:00',
+            'status' => AttendanceStatus::OnTime,
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('attendances.index', ['date' => '2026-06-10']));
+
+        $response->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.1.id', null)
+            ->assertJsonPath('data.1.is_virtual', true)
+            ->assertJsonPath('data.1.virtual_key', 'virtual-'.$missingEmployee->id.'-2026-06-10')
+            ->assertJsonPath('data.1.user_id', $missingEmployee->id)
+            ->assertJsonPath('data.1.status', AttendanceStatus::Absent->value);
+
+        expect(collect($response->json('data'))->pluck('user_id')->all())
+            ->not->toContain($futureEmployee->id);
+    });
 });
 
 describe('store', function () {
@@ -601,6 +638,46 @@ describe('store', function () {
         $response->assertCreated()
             ->assertJsonPath('data.user_id', $employee->id)
             ->assertJsonPath('data.office_id', $office->id);
+    });
+
+    test('check in converts same day generated absent row into real attendance', function () {
+        $employee = User::factory()->employee()->create();
+        $office = Office::factory()->create([
+            'latitude' => -2.965107,
+            'longitude' => 104.736443,
+            'radius' => 50,
+            'work_start_time' => '08:00',
+        ]);
+        $attendance = Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'office_id' => null,
+            'date' => '2026-06-10',
+            'in_at' => null,
+            'out_at' => null,
+            'in_latitude' => null,
+            'in_longitude' => null,
+            'status' => AttendanceStatus::Absent,
+            'created_by' => 'system',
+        ]);
+
+        $response = $this->actingAs($employee)
+            ->postJson(route('attendances.store'), [
+                'office_id' => $office->id,
+                'date' => '2026-06-10',
+                'in_at' => '2026-06-10 08:01:00',
+                'in_latitude' => -2.965107,
+                'in_longitude' => 104.736443,
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('data.id', $attendance->id)
+            ->assertJsonPath('data.status', AttendanceStatus::Late->value)
+            ->assertJsonPath('data.office_id', $office->id);
+
+        expect(Attendance::query()
+            ->where('user_id', $employee->id)
+            ->whereDate('date', '2026-06-10')
+            ->count())->toBe(1);
     });
 });
 

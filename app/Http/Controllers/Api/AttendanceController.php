@@ -8,9 +8,11 @@ use App\Http\Requests\Attendance\FilterAttendanceRequest;
 use App\Http\Requests\Attendance\StoreAttendanceRequest;
 use App\Http\Requests\Attendance\StoreManualAttendanceRequest;
 use App\Http\Requests\Attendance\UpdateAttendanceRequest;
+use App\Http\Resources\AttendanceReportDetailResource;
 use App\Http\Resources\AttendanceResource;
 use App\Models\Attendance;
 use App\Models\Office;
+use App\Support\AttendanceReportBuilder;
 use App\Support\AttendanceWorkdays;
 use App\Traits\ApiResponse;
 use Carbon\CarbonImmutable;
@@ -27,15 +29,12 @@ class AttendanceController extends Controller
     /**
      * Display a listing of the attendances.
      */
-    public function index(FilterAttendanceRequest $request): JsonResponse
+    public function index(FilterAttendanceRequest $request, AttendanceReportBuilder $reportBuilder): JsonResponse
     {
-        $query = Attendance::with(['user', 'office', 'attendanceRequest.user', 'attendanceRequest.reviewer'])
-            ->orderByDesc('date')
-            ->orderByDesc('in_at');
-
-        $request->toFilter()->apply($query, $request->user());
-
-        return $this->success('Attendances retrieved successfully.', AttendanceResource::collection($query->get()));
+        return $this->success(
+            'Attendances retrieved successfully.',
+            AttendanceReportDetailResource::collection($reportBuilder->detailRows($request->toFilter(), $request->user())),
+        );
     }
 
     /**
@@ -91,11 +90,35 @@ class AttendanceController extends Controller
             ]);
         }
 
-        $attendance = Attendance::create([
+        $date = $data['date'] ?? $inAt->toDateString();
+        $realAttendanceData = [
             ...$data,
-            'date' => $data['date'] ?? $inAt->toDateString(),
+            'attendance_request_id' => null,
+            'date' => $date,
             'in_at' => $inAt,
             'status' => $this->resolveStatus($inAt, $office),
+        ];
+
+        $existingAbsent = Attendance::query()
+            ->where('user_id', $data['user_id'])
+            ->whereDate('date', $date)
+            ->where('status', AttendanceStatus::Absent->value)
+            ->first();
+
+        if ($existingAbsent) {
+            $existingAbsent->update([
+                ...$realAttendanceData,
+                'updated_by' => $request->user()?->username,
+            ]);
+
+            return $this->success(
+                'Attendance updated successfully.',
+                new AttendanceResource($existingAbsent->fresh(['user', 'office'])),
+            );
+        }
+
+        $attendance = Attendance::create([
+            ...$realAttendanceData,
             'created_by' => $request->user()?->username,
         ]);
 

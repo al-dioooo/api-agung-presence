@@ -6,6 +6,8 @@ use App\Enums\AttendanceRequestStatus;
 use App\Enums\AttendanceStatus;
 use App\Models\Attendance;
 use App\Models\AttendanceRequest;
+use App\Support\AttendanceAbsencePolicy;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -63,6 +65,15 @@ class StoreAttendanceApplicationRequest extends FormRequest
 
                 if (! $userId || ! $startDate || ! $endDate) {
                     return;
+                }
+
+                if (
+                    $this->input('type') === AttendanceStatus::Sick->value
+                    && CarbonImmutable::parse($startDate, AttendanceAbsencePolicy::TIMEZONE)
+                        ->startOfDay()
+                        ->gt(CarbonImmutable::parse(now(AttendanceAbsencePolicy::TIMEZONE))->startOfDay())
+                ) {
+                    $validator->errors()->add('start_date', 'Tanggal mulai sakit tidak boleh lebih dari hari ini.');
                 }
 
                 $hasOverlappingRequest = AttendanceRequest::query()

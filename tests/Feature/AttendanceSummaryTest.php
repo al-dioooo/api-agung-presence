@@ -138,6 +138,30 @@ describe('summary', function () {
             ->exists())->toBeFalse();
     });
 
+    test('summary includes virtual absent rows for explicit date filters', function () {
+        $admin = User::factory()->administrator()->create();
+        $missingEmployee = User::factory()->employee()->create([
+            'name' => 'Gita Rahma',
+            'username' => 'gita',
+            'email' => 'gita@example.com',
+            'created_at' => '2026-06-01 08:00:00',
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('attendances.summary', [
+                'user_id' => $missingEmployee->id,
+                'date' => '2026-06-10',
+            ]));
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.user_id', $missingEmployee->id)
+            ->assertJsonPath('data.0.absent_count', 1)
+            ->assertJsonPath('data.0.total_real_check_ins', 0)
+            ->assertJsonPath('data.0.first_attendance_date', '2026-06-10')
+            ->assertJsonPath('data.0.latest_attendance_date', '2026-06-10');
+    });
+
     test('summary is administrator only', function () {
         $employee = User::factory()->employee()->create();
 

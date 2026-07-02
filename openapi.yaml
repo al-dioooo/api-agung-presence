@@ -538,7 +538,7 @@ paths:
       tags:
         - Attendances
       summary: List Attendances
-      description: Administrators receive all matching attendances. Employees receive only their own matching attendances.
+      description: Administrators receive all matching attendances. Employees receive only their own matching attendances. When a `date` or complete `start_date` and `end_date` range is provided, missing employee workdays are projected as virtual `absent` rows until a persisted attendance or approved request row exists.
       operationId: listAttendances
       parameters:
         - $ref: "#/components/parameters/AttendanceSearch"
@@ -561,7 +561,7 @@ paths:
       tags:
         - Attendances
       summary: Create Attendance
-      description: Employees check in for themselves. Administrators must provide `user_id` and can create attendance for another user. The selected office must be active and submitted coordinates must be inside the office radius.
+      description: Employees check in for themselves. Administrators must provide `user_id` and can create attendance for another user. The selected office must be active and submitted coordinates must be inside the office radius. If an end-of-day generated `absent` row already exists for the employee and date, check-in converts it into the real attendance row.
       operationId: createAttendance
       requestBody:
         required: true
@@ -592,7 +592,7 @@ paths:
       tags:
         - Attendances
       summary: Attendance Summary
-      description: Administrator-only per-employee totals for matching attendance rows. `total_real_check_ins` counts only `on_time` and `late`.
+      description: Administrator-only per-employee totals for matching attendance rows. `total_real_check_ins` counts only `on_time` and `late`. When a `date` or complete `start_date` and `end_date` range is provided, totals include virtual `absent` rows for missing employee workdays.
       operationId: attendanceSummary
       parameters:
         - $ref: "#/components/parameters/AttendanceSearch"
@@ -619,7 +619,7 @@ paths:
       tags:
         - Attendances
       summary: Export Attendances
-      description: Administrator-only XLSX recap export for matching attendance rows. The workbook includes detail and summary sheets, Excel filters, and embedded proof-photo thumbnails when valid proof photos are available.
+      description: Administrator-only XLSX recap export for matching attendance rows. The workbook contains a `summary` sheet first and a `detail` sheet second, includes virtual `absent` rows for explicit date filters, adds Excel filters, and embeds proof-photo thumbnails when valid proof photos are available.
       operationId: exportAttendances
       parameters:
         - $ref: "#/components/parameters/AttendanceSearch"
@@ -631,7 +631,7 @@ paths:
         - $ref: "#/components/parameters/AttendanceEndDate"
       responses:
         "200":
-          description: XLSX workbook with attendance detail and totals.
+          description: XLSX workbook with `summary` and `detail` sheets.
           content:
             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
               schema:
@@ -1227,10 +1227,11 @@ components:
         start_date:
           type: string
           format: date
+          description: For `sick` requests, must be today or earlier in the Asia/Jakarta timezone.
         end_date:
           type: string
           format: date
-          description: Must be the same as or after `start_date`.
+          description: Must be the same as or after `start_date`. Sick requests may end after today.
         description:
           type: string
           maxLength: 2000
@@ -1378,12 +1379,25 @@ components:
       type: object
       required:
         - id
+        - virtual_key
+        - is_virtual
         - user_id
         - status
       properties:
         id:
-          type: integer
+          type:
+            - integer
+            - "null"
           format: int64
+          description: Null for virtual rows projected by report/list endpoints.
+        virtual_key:
+          type:
+            - string
+            - "null"
+          description: Stable key for a virtual employee-date row; null for persisted rows.
+        is_virtual:
+          type: boolean
+          description: True when the row is projected for a missing employee workday and has not been stored yet.
         user_id:
           type: integer
           format: int64

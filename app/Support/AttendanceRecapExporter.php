@@ -3,11 +3,8 @@
 namespace App\Support;
 
 use App\Enums\AttendanceStatus;
-use App\Enums\UserRole;
-use App\Models\Attendance;
 use App\Models\User;
 use GdImage;
-use Illuminate\Database\Eloquent\Builder;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
@@ -23,6 +20,8 @@ class AttendanceRecapExporter
 
     private const PROOF_PHOTO_MAX_HEIGHT = 72;
 
+    public function __construct(private readonly AttendanceReportBuilder $reportBuilder) {}
+
     /**
      * Build an XLSX workbook and return its binary contents.
      */
@@ -33,18 +32,18 @@ class AttendanceRecapExporter
         $spreadsheet = new Spreadsheet;
         $spreadsheet->getDefaultStyle()->getFont()->setName('Arial')->setSize(10);
 
-        $detailSheet = $spreadsheet->getActiveSheet();
-        $detailSheet->setTitle('Rekap Absensi');
-        $this->writeDetailSheet($detailSheet, $filter, $actor, $imageResources);
-
-        $summarySheet = $spreadsheet->createSheet();
-        $summarySheet->setTitle('Total Kehadiran');
+        $summarySheet = $spreadsheet->getActiveSheet();
+        $summarySheet->setTitle('summary');
         $summarySheet->fromArray($this->summaryRows($filter, $actor), null, 'A1', true);
         $this->formatSheet($summarySheet);
 
+        $detailSheet = $spreadsheet->createSheet();
+        $detailSheet->setTitle('detail');
+        $this->writeDetailSheet($detailSheet, $filter, $actor, $imageResources);
+
         foreach ($spreadsheet->getAllSheets() as $sheet) {
             foreach (range('A', $sheet->getHighestColumn()) as $column) {
-                if ($column !== self::PROOF_PHOTO_COLUMN) {
+                if ($sheet->getTitle() !== 'detail' || $column !== self::PROOF_PHOTO_COLUMN) {
                     $sheet->getColumnDimension($column)->setAutoSize(true);
                 }
             }
@@ -62,41 +61,6 @@ class AttendanceRecapExporter
         }
 
         return $contents === false ? '' : $contents;
-    }
-
-    /**
-     * @return Builder<User>
-     */
-    public function employeeSummaryQuery(?AttendanceFilter $filter = null, ?User $actor = null): Builder
-    {
-        $filter ??= new AttendanceFilter;
-        $countForStatus = fn (AttendanceStatus $status) => function (Builder $query) use ($filter, $actor, $status): void {
-            $filter->apply($query, $actor);
-            $query->where('status', $status->value);
-        };
-        $filteredAttendances = function (Builder $query) use ($filter, $actor): void {
-            $filter->apply($query, $actor);
-        };
-
-        $query = User::query()
-            ->where('role', UserRole::Employee->value)
-            ->withCount([
-                'attendances as on_time_count' => $countForStatus(AttendanceStatus::OnTime),
-                'attendances as late_count' => $countForStatus(AttendanceStatus::Late),
-                'attendances as sick_count' => $countForStatus(AttendanceStatus::Sick),
-                'attendances as leave_count' => $countForStatus(AttendanceStatus::Leave),
-                'attendances as permit_count' => $countForStatus(AttendanceStatus::Permit),
-                'attendances as absent_count' => $countForStatus(AttendanceStatus::Absent),
-            ])
-            ->withMin(['attendances as first_attendance_date' => $filteredAttendances], 'date')
-            ->withMax(['attendances as latest_attendance_date' => $filteredAttendances], 'date')
-            ->orderBy('name');
-
-        if ($filter->hasConstraints()) {
-            $query->whereHas('attendances', $filteredAttendances);
-        }
-
-        return $query;
     }
 
     /**
@@ -132,47 +96,43 @@ class AttendanceRecapExporter
     private function writeDetailSheet(Worksheet $sheet, AttendanceFilter $filter, ?User $actor, array &$imageResources): void
     {
         $sheet->fromArray($this->detailHeaders(), null, 'A1', true);
-        $query = Attendance::with(['user', 'office', 'attendanceRequest.reviewer'])
-            ->orderBy('date')
-            ->orderBy('user_id');
-
-        $filter->apply($query, $actor);
-
         $rowNumber = 2;
-        $query->each(function (Attendance $attendance) use ($sheet, &$imageResources, &$rowNumber): void {
-            $request = $attendance->attendanceRequest;
-            $thumbnail = $this->createProofThumbnail($attendance->proof_photo);
-            $hasPhoto = $thumbnail !== null;
 
-            $sheet->fromArray([[
-                $attendance->user?->name,
-                $attendance->user?->username,
-                $attendance->user?->email,
-                $attendance->date?->format('Y-m-d'),
-                $this->statusLabel($attendance->status),
-                $attendance->office?->name,
-                $attendance->in_at?->format('Y-m-d H:i:s'),
-                $attendance->out_at?->format('Y-m-d H:i:s'),
-                $this->durationHours($attendance),
-                $this->sourceLabel($attendance),
-                $hasPhoto ? 'Ya' : 'Tidak',
-                null,
-                $request ? $this->statusLabel($request->type) : null,
-                $request?->description,
-                $request?->rejection_reason,
-                $request?->reviewer?->username,
-                $attendance->created_by,
-                $attendance->updated_by,
-            ]], null, 'A'.$rowNumber, true);
+        $this->reportBuilder->detailRows($filter, $actor, false)
+            ->each(function (ProjectedAttendance $attendance) use ($sheet, &$imageResources, &$rowNumber): void {
+                $request = $attendance->attendanceRequest;
+                $thumbnail = $this->createProofThumbnail($attendance->proofPhoto);
+                $hasPhoto = $thumbnail !== null;
 
-            if ($thumbnail !== null) {
-                $imageResources[] = $thumbnail['image'];
-                $this->addProofDrawing($sheet, $thumbnail, $rowNumber);
-                $sheet->getRowDimension($rowNumber)->setRowHeight(58);
-            }
+                $sheet->fromArray([[
+                    $attendance->user?->name,
+                    $attendance->user?->username,
+                    $attendance->user?->email,
+                    $attendance->date->format('Y-m-d'),
+                    $this->statusLabel($attendance->status),
+                    $attendance->office?->name,
+                    $attendance->inAt?->format('Y-m-d H:i:s'),
+                    $attendance->outAt?->format('Y-m-d H:i:s'),
+                    $this->durationHours($attendance),
+                    $this->sourceLabel($attendance),
+                    $hasPhoto ? 'Ya' : 'Tidak',
+                    null,
+                    $request ? $this->statusLabel($request->type) : null,
+                    $request?->description,
+                    $request?->rejection_reason,
+                    $request?->reviewer?->username,
+                    $attendance->createdBy,
+                    $attendance->updatedBy,
+                ]], null, 'A'.$rowNumber, true);
 
-            $rowNumber++;
-        });
+                if ($thumbnail !== null) {
+                    $imageResources[] = $thumbnail['image'];
+                    $this->addProofDrawing($sheet, $thumbnail, $rowNumber);
+                    $sheet->getRowDimension($rowNumber)->setRowHeight(58);
+                }
+
+                $rowNumber++;
+            });
 
         $this->formatSheet($sheet);
         $sheet->getColumnDimension(self::PROOF_PHOTO_COLUMN)->setWidth(18);
@@ -200,44 +160,48 @@ class AttendanceRecapExporter
             'Tanggal Terakhir',
         ]];
 
-        $this->employeeSummaryQuery($filter, $actor)
-            ->each(function (User $employee) use (&$rows): void {
+        $this->reportBuilder->summaryRows($filter, $actor)
+            ->each(function (array $employee) use (&$rows): void {
                 $rows[] = [
-                    $employee->name,
-                    $employee->username,
-                    $employee->email,
-                    $employee->on_time_count,
-                    $employee->late_count,
-                    $employee->on_time_count + $employee->late_count,
-                    $employee->sick_count,
-                    $employee->leave_count,
-                    $employee->permit_count,
-                    $employee->absent_count,
-                    $employee->first_attendance_date,
-                    $employee->latest_attendance_date,
+                    $employee['name'],
+                    $employee['username'],
+                    $employee['email'],
+                    $employee['on_time_count'],
+                    $employee['late_count'],
+                    $employee['total_real_check_ins'],
+                    $employee['sick_count'],
+                    $employee['leave_count'],
+                    $employee['permit_count'],
+                    $employee['absent_count'],
+                    $employee['first_attendance_date'],
+                    $employee['latest_attendance_date'],
                 ];
             });
 
         return $rows;
     }
 
-    private function durationHours(Attendance $attendance): ?float
+    private function durationHours(ProjectedAttendance $attendance): ?float
     {
-        if (! $attendance->in_at || ! $attendance->out_at) {
+        if (! $attendance->inAt || ! $attendance->outAt) {
             return null;
         }
 
-        return round($attendance->in_at->diffInMinutes($attendance->out_at) / 60, 2);
+        return round($attendance->inAt->diffInMinutes($attendance->outAt) / 60, 2);
     }
 
-    private function sourceLabel(Attendance $attendance): string
+    private function sourceLabel(ProjectedAttendance $attendance): string
     {
-        if ($attendance->attendance_request_id !== null) {
+        if ($attendance->attendanceRequestId !== null) {
             return 'Pengajuan';
         }
 
         if (in_array($attendance->status, [AttendanceStatus::Sick, AttendanceStatus::Leave, AttendanceStatus::Permit], true)) {
             return 'Input Manual';
+        }
+
+        if ($attendance->status === AttendanceStatus::Absent) {
+            return 'Sistem';
         }
 
         return 'Absensi';

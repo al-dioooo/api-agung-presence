@@ -5,36 +5,21 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Attendance\FilterAttendanceRequest;
 use App\Support\AttendanceRecapExporter;
+use App\Support\AttendanceReportBuilder;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Carbon;
 use Symfony\Component\HttpFoundation\Response;
 
 class AttendanceReportController extends Controller
 {
     use ApiResponse;
 
-    public function summary(FilterAttendanceRequest $request, AttendanceRecapExporter $exporter): JsonResponse
+    public function summary(FilterAttendanceRequest $request, AttendanceReportBuilder $reportBuilder): JsonResponse
     {
-        $summary = $exporter->employeeSummaryQuery($request->toFilter(), $request->user())
-            ->get()
-            ->map(fn ($employee) => [
-                'user_id' => $employee->id,
-                'name' => $employee->name,
-                'username' => $employee->username,
-                'email' => $employee->email,
-                'on_time_count' => $employee->on_time_count,
-                'late_count' => $employee->late_count,
-                'total_real_check_ins' => $employee->on_time_count + $employee->late_count,
-                'sick_count' => $employee->sick_count,
-                'leave_count' => $employee->leave_count,
-                'permit_count' => $employee->permit_count,
-                'absent_count' => $employee->absent_count,
-                'first_attendance_date' => $this->formatDate($employee->first_attendance_date),
-                'latest_attendance_date' => $this->formatDate($employee->latest_attendance_date),
-            ]);
-
-        return $this->success('Attendance summary retrieved successfully.', $summary);
+        return $this->success(
+            'Attendance summary retrieved successfully.',
+            $reportBuilder->summaryRows($request->toFilter(), $request->user()),
+        );
     }
 
     public function export(FilterAttendanceRequest $request, AttendanceRecapExporter $exporter): Response
@@ -45,10 +30,5 @@ class AttendanceReportController extends Controller
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'Content-Disposition' => 'attachment; filename="'.$filename.'"',
         ]);
-    }
-
-    private function formatDate(mixed $date): ?string
-    {
-        return $date ? Carbon::parse($date)->format('Y-m-d') : null;
     }
 }

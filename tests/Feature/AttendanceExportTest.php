@@ -36,7 +36,7 @@ function proofPhotoDataUrl(): string
 }
 
 describe('export', function () {
-    test('administrator can download a complete xlsx recap with detail and summary sheets', function () {
+    test('administrator can download a complete xlsx recap with summary and detail sheets', function () {
         $admin = User::factory()->administrator()->create();
         $employee = User::factory()->employee()->create([
             'name' => 'Citra Dewi',
@@ -84,10 +84,10 @@ describe('export', function () {
         expect($response->headers->get('Content-Disposition'))->toContain('.xlsx');
 
         $spreadsheet = workbookFromResponseContent($response->getContent());
-        expect($spreadsheet->getSheetNames())->toBe(['Rekap Absensi', 'Total Kehadiran']);
+        expect($spreadsheet->getSheetNames())->toBe(['summary', 'detail']);
 
-        $detail = $spreadsheet->getSheetByName('Rekap Absensi');
-        $summary = $spreadsheet->getSheetByName('Total Kehadiran');
+        $summary = $spreadsheet->getSheetByName('summary');
+        $detail = $spreadsheet->getSheetByName('detail');
 
         expect($detail->rangeToArray('A1:R1')[0])->toBe([
             'Nama Karyawan',
@@ -178,8 +178,8 @@ describe('export', function () {
         $response->assertOk();
 
         $spreadsheet = workbookFromResponseContent($response->getContent());
-        $detail = $spreadsheet->getSheetByName('Rekap Absensi');
-        $summary = $spreadsheet->getSheetByName('Total Kehadiran');
+        $summary = $spreadsheet->getSheetByName('summary');
+        $detail = $spreadsheet->getSheetByName('detail');
 
         expect($detail->getHighestRow())->toBe(2)
             ->and($detail->getCell('A2')->getValue())->toBe('Nadia Putri')
@@ -225,8 +225,8 @@ describe('export', function () {
         $response->assertOk();
 
         $spreadsheet = workbookFromResponseContent($response->getContent());
-        $detail = $spreadsheet->getSheetByName('Rekap Absensi');
-        $summary = $spreadsheet->getSheetByName('Total Kehadiran');
+        $summary = $spreadsheet->getSheetByName('summary');
+        $detail = $spreadsheet->getSheetByName('detail');
 
         expect($detail->getHighestRow())->toBe(4)
             ->and($detail->rangeToArray('D2:D4'))->toBe([
@@ -237,6 +237,34 @@ describe('export', function () {
             ->and($detail->getCell('E2')->getValue())->toBe('Cuti')
             ->and($detail->getAutoFilter()->getRange())->toBe('A1:R4')
             ->and($summary->getCell('H2')->getValue())->toBe(3);
+    });
+
+    test('export includes virtual absent rows for explicit date filters', function () {
+        $admin = User::factory()->administrator()->create();
+        $employee = User::factory()->employee()->create([
+            'name' => 'Sari Melati',
+            'username' => 'sari',
+            'email' => 'sari@example.com',
+            'created_at' => '2026-06-01 08:00:00',
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->get(route('attendances.export', [
+                'user_id' => $employee->id,
+                'date' => '2026-06-10',
+            ]));
+
+        $response->assertOk();
+
+        $spreadsheet = workbookFromResponseContent($response->getContent());
+        $summary = $spreadsheet->getSheetByName('summary');
+        $detail = $spreadsheet->getSheetByName('detail');
+
+        expect($summary->getCell('A2')->getValue())->toBe('Sari Melati')
+            ->and($summary->getCell('J2')->getValue())->toBe(1)
+            ->and($detail->getCell('A2')->getValue())->toBe('Sari Melati')
+            ->and($detail->getCell('E2')->getValue())->toBe('Tidak Hadir')
+            ->and($detail->getCell('J2')->getValue())->toBe('Sistem');
     });
 
     test('export handles roughly five hundred filtered rows', function () {
@@ -257,7 +285,7 @@ describe('export', function () {
         $response->assertOk();
 
         $spreadsheet = workbookFromResponseContent($response->getContent());
-        $detail = $spreadsheet->getSheetByName('Rekap Absensi');
+        $detail = $spreadsheet->getSheetByName('detail');
 
         expect($detail->getHighestRow())->toBe(501)
             ->and($detail->getAutoFilter()->getRange())->toBe('A1:R501');

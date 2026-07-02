@@ -10,7 +10,7 @@ use App\Http\Requests\Attendance\StoreAttendanceApplicationRequest;
 use App\Http\Resources\AttendanceRequestResource;
 use App\Models\Attendance;
 use App\Models\AttendanceRequest;
-use App\Support\AttendanceWorkdays;
+use App\Support\AttendanceAbsencePolicy;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -81,8 +81,11 @@ class AttendanceRequestController extends Controller
     /**
      * Approve or reject the specified attendance request.
      */
-    public function review(ReviewAttendanceRequest $request, AttendanceRequest $attendanceRequest): JsonResponse
-    {
+    public function review(
+        ReviewAttendanceRequest $request,
+        AttendanceRequest $attendanceRequest,
+        AttendanceAbsencePolicy $absencePolicy,
+    ): JsonResponse {
         if ($attendanceRequest->approval_status !== AttendanceRequestStatus::Pending) {
             return $this->error('Attendance request has already been reviewed.', 422, [
                 'errors' => [
@@ -102,9 +105,9 @@ class AttendanceRequestController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($attendanceRequest, $approvalStatus, $data, $request): void {
+        DB::transaction(function () use ($attendanceRequest, $approvalStatus, $data, $request, $absencePolicy): void {
             if ($approvalStatus === AttendanceRequestStatus::Approved) {
-                $this->materializeApprovedRequest($attendanceRequest, $request->user()->username);
+                $this->materializeApprovedRequest($attendanceRequest, $request->user()->username, $absencePolicy);
             }
 
             $attendanceRequest->update([
@@ -143,16 +146,16 @@ class AttendanceRequestController extends Controller
             ->exists();
     }
 
-    private function materializeApprovedRequest(AttendanceRequest $attendanceRequest, string $reviewerUsername): void
-    {
-        foreach (AttendanceWorkdays::dates($attendanceRequest->start_date, $attendanceRequest->end_date) as $cursor) {
+    private function materializeApprovedRequest(
+        AttendanceRequest $attendanceRequest,
+        string $reviewerUsername,
+        AttendanceAbsencePolicy $absencePolicy,
+    ): void {
+        foreach ($absencePolicy->workdayDates($attendanceRequest->start_date, $attendanceRequest->end_date) as $cursor) {
             $attendance = Attendance::query()
                 ->where('user_id', $attendanceRequest->user_id)
                 ->whereDate('date', $cursor->toDateString())
-                ->whereNotIn('status', [
-                    AttendanceStatus::OnTime->value,
-                    AttendanceStatus::Late->value,
-                ])
+                ->whereIn('status', $absencePolicy->nonRealStatusValues())
                 ->first();
 
             $manualData = [
