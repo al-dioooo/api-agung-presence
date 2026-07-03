@@ -98,7 +98,7 @@ class AttendanceRecapExporter
         $sheet->fromArray($this->detailHeaders(), null, 'A1', true);
         $rowNumber = 2;
 
-        $this->reportBuilder->detailRows($filter, $actor, false)
+        $this->reportBuilder->detailRows($filter, $actor, false, 'date')
             ->each(function (ProjectedAttendance $attendance) use ($sheet, &$imageResources, &$rowNumber): void {
                 $request = $attendance->attendanceRequest;
                 $thumbnail = $this->createProofThumbnail($attendance->proofPhoto);

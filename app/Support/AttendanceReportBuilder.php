@@ -5,6 +5,8 @@ namespace App\Support;
 use App\Enums\AttendanceStatus;
 use App\Models\Attendance;
 use App\Models\User;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -16,7 +18,7 @@ class AttendanceReportBuilder
     /**
      * @return Collection<int, ProjectedAttendance>
      */
-    public function detailRows(?AttendanceFilter $filter = null, ?User $actor = null, bool $descending = true): Collection
+    public function detailRows(?AttendanceFilter $filter = null, ?User $actor = null, bool $descending = true, string $sortBy = 'created_at'): Collection
     {
         $filter ??= new AttendanceFilter;
         $query = Attendance::with(['user', 'office', 'attendanceRequest.user', 'attendanceRequest.reviewer']);
@@ -28,7 +30,7 @@ class AttendanceReportBuilder
 
         $rows = $rows->merge($this->virtualRows($filter, $actor));
 
-        return $this->sortDetailRows($rows, $descending)->values();
+        return $this->sortDetailRows($rows, $descending, $sortBy)->values();
     }
 
     /**
@@ -37,7 +39,7 @@ class AttendanceReportBuilder
     public function summaryRows(?AttendanceFilter $filter = null, ?User $actor = null): Collection
     {
         $filter ??= new AttendanceFilter;
-        $details = $this->detailRows($filter, $actor, false);
+        $details = $this->detailRows($filter, $actor, false, 'date');
         $detailsByUser = $details->groupBy(fn (ProjectedAttendance $row) => $row->userId);
         $hasConstraints = $filter->hasConstraints();
 
@@ -205,23 +207,87 @@ class AttendanceReportBuilder
      * @param  Collection<int, ProjectedAttendance>  $rows
      * @return Collection<int, ProjectedAttendance>
      */
-    private function sortDetailRows(Collection $rows, bool $descending): Collection
+    private function sortDetailRows(Collection $rows, bool $descending, string $sortBy): Collection
+    {
+        if ($sortBy === 'created_at') {
+            return $this->sortDetailRowsByCreatedAt($rows, $descending);
+        }
+
+        return $this->sortDetailRowsByDate($rows, $descending);
+    }
+
+    /**
+     * @param  Collection<int, ProjectedAttendance>  $rows
+     * @return Collection<int, ProjectedAttendance>
+     */
+    private function sortDetailRowsByCreatedAt(Collection $rows, bool $descending): Collection
     {
         return $rows->sort(function (ProjectedAttendance $left, ProjectedAttendance $right) use ($descending): int {
-            $dateComparison = strcmp($left->date->format('Y-m-d'), $right->date->format('Y-m-d'));
-            if ($dateComparison !== 0) {
-                return $descending ? -$dateComparison : $dateComparison;
+            $leftCreatedAt = $this->createdAtTimestamp($left);
+            $rightCreatedAt = $this->createdAtTimestamp($right);
+
+            if ($leftCreatedAt === null && $rightCreatedAt !== null) {
+                return 1;
             }
 
-            $leftTime = $left->inAt?->format('H:i:s') ?? '';
-            $rightTime = $right->inAt?->format('H:i:s') ?? '';
-            $timeComparison = strcmp($leftTime, $rightTime);
-            if ($timeComparison !== 0) {
-                return $descending ? -$timeComparison : $timeComparison;
+            if ($leftCreatedAt !== null && $rightCreatedAt === null) {
+                return -1;
             }
 
-            return $left->userId <=> $right->userId;
+            if ($leftCreatedAt !== null && $rightCreatedAt !== null && $leftCreatedAt !== $rightCreatedAt) {
+                $createdAtComparison = $leftCreatedAt <=> $rightCreatedAt;
+
+                return $descending ? -$createdAtComparison : $createdAtComparison;
+            }
+
+            return $this->compareDetailRowsByAttendanceDate($left, $right, $descending);
         });
+    }
+
+    private function createdAtTimestamp(ProjectedAttendance $row): ?int
+    {
+        if ($row->createdAt instanceof CarbonInterface) {
+            return $row->createdAt->getTimestamp();
+        }
+
+        if ($row->createdAt === null || $row->createdAt === '') {
+            return null;
+        }
+
+        return CarbonImmutable::parse($row->createdAt)->getTimestamp();
+    }
+
+    /**
+     * @param  Collection<int, ProjectedAttendance>  $rows
+     * @return Collection<int, ProjectedAttendance>
+     */
+    private function sortDetailRowsByDate(Collection $rows, bool $descending): Collection
+    {
+        return $rows->sort(function (ProjectedAttendance $left, ProjectedAttendance $right) use ($descending): int {
+            return $this->compareDetailRowsByAttendanceDate($left, $right, $descending);
+        });
+    }
+
+    private function compareDetailRowsByAttendanceDate(ProjectedAttendance $left, ProjectedAttendance $right, bool $descending): int
+    {
+        $dateComparison = strcmp($left->date->format('Y-m-d'), $right->date->format('Y-m-d'));
+        if ($dateComparison !== 0) {
+            return $descending ? -$dateComparison : $dateComparison;
+        }
+
+        $leftTime = $left->inAt?->format('H:i:s') ?? '';
+        $rightTime = $right->inAt?->format('H:i:s') ?? '';
+        $timeComparison = strcmp($leftTime, $rightTime);
+        if ($timeComparison !== 0) {
+            return $descending ? -$timeComparison : $timeComparison;
+        }
+
+        $userComparison = $left->userId <=> $right->userId;
+        if ($userComparison !== 0) {
+            return $userComparison;
+        }
+
+        return ($left->id ?? 0) <=> ($right->id ?? 0);
     }
 
     /**

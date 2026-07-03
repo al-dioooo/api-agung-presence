@@ -538,7 +538,7 @@ paths:
       tags:
         - Attendances
       summary: List Attendances
-      description: Administrators receive all matching attendances. Employees receive only their own matching attendances. When a `date` or complete `start_date` and `end_date` range is provided, missing employee workdays are projected as virtual `absent` rows until a persisted attendance or approved request row exists.
+      description: Administrators receive all matching attendances. Employees receive only their own matching attendances. Results default to newest `created_at` first, with attendance date used as the tie-breaker. When a `date` or complete `start_date` and `end_date` range is provided, missing employee workdays are projected as virtual `absent` rows until a persisted attendance or approved request row exists.
       operationId: listAttendances
       parameters:
         - $ref: "#/components/parameters/AttendanceSearch"

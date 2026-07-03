@@ -44,6 +44,41 @@ describe('index', function () {
             ->assertJsonPath('data.0.user.email', 'first.employee@example.com');
     });
 
+    test('attendance index defaults to newest created at with attendance date tie breaker', function () {
+        $admin = User::factory()->administrator()->create();
+        $employee = User::factory()->employee()->create();
+        $office = Office::factory()->create();
+        $olderCreatedNewerAttendanceDate = Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'office_id' => $office->id,
+            'date' => '2026-06-30',
+            'in_at' => '2026-06-30 08:00:00',
+            'created_at' => '2026-07-01 08:00:00',
+        ]);
+        $newerCreatedOlderAttendanceDate = Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'office_id' => $office->id,
+            'date' => '2026-06-28',
+            'in_at' => '2026-06-28 08:00:00',
+            'created_at' => '2026-07-03 08:00:00',
+        ]);
+        $sameCreatedNewerAttendanceDate = Attendance::factory()->create([
+            'user_id' => $employee->id,
+            'office_id' => $office->id,
+            'date' => '2026-06-29',
+            'in_at' => '2026-06-29 08:00:00',
+            'created_at' => '2026-07-03 08:00:00',
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('attendances.index'));
+
+        $response->assertOk()
+            ->assertJsonPath('data.0.id', $sameCreatedNewerAttendanceDate->id)
+            ->assertJsonPath('data.1.id', $newerCreatedOlderAttendanceDate->id)
+            ->assertJsonPath('data.2.id', $olderCreatedNewerAttendanceDate->id);
+    });
+
     test('employee can only list their own attendances', function () {
         $employee = User::factory()->employee()->create();
         Attendance::factory()->count(2)->create(['user_id' => $employee->id]);
