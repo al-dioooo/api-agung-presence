@@ -291,6 +291,32 @@ describe('export', function () {
             ->and($detail->getAutoFilter()->getRange())->toBe('A1:R501');
     });
 
+    test('export ignores pagination query parameters and remains complete', function () {
+        $admin = User::factory()->administrator()->create();
+        $employee = User::factory()->employee()->create();
+        $office = Office::factory()->create();
+
+        Attendance::factory()->count(20)->create([
+            'user_id' => $employee->id,
+            'office_id' => $office->id,
+            'status' => AttendanceStatus::OnTime,
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->get(route('attendances.export', [
+                'user_id' => $employee->id,
+                'page' => 2,
+                'per_page' => 1,
+            ]));
+
+        $response->assertOk();
+
+        $spreadsheet = workbookFromResponseContent($response->getContent());
+        $detail = $spreadsheet->getSheetByName('detail');
+
+        expect($detail->getHighestRow())->toBe(21);
+    });
+
     test('export is administrator only', function () {
         $employee = User::factory()->employee()->create();
 

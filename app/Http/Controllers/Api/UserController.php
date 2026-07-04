@@ -36,13 +36,13 @@ class UserController extends Controller
             $query->where('role', $request->validated('role'));
         }
 
-        if ($request->filled('limit')) {
-            $query->limit($request->integer('limit'));
-        }
+        $pagination = $request->pagination();
+        $paginator = $query->paginate($pagination->perPage, ['*'], 'page', $pagination->page);
 
-        return $this->success(
+        return $this->paginatedSuccess(
             'Users retrieved successfully.',
-            UserResource::collection($query->get()),
+            UserResource::collection($paginator->getCollection()),
+            $paginator,
         );
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Office;
 
+use App\Support\Pagination\PaginationOptions;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -9,25 +10,21 @@ use Illuminate\Validation\Validator;
 
 class ListOfficesRequest extends FormRequest
 {
-    public const MAX_LIMIT = 100;
-
     /**
      * Prepare the data for validation.
      */
     protected function prepareForValidation(): void
     {
-        if (! $this->has('active_only')) {
-            return;
-        }
+        if ($this->has('active_only')) {
+            $activeOnly = filter_var(
+                $this->input('active_only'),
+                FILTER_VALIDATE_BOOLEAN,
+                FILTER_NULL_ON_FAILURE,
+            );
 
-        $activeOnly = filter_var(
-            $this->input('active_only'),
-            FILTER_VALIDATE_BOOLEAN,
-            FILTER_NULL_ON_FAILURE,
-        );
-
-        if ($activeOnly !== null) {
-            $this->merge(['active_only' => $activeOnly]);
+            if ($activeOnly !== null) {
+                $this->merge(['active_only' => $activeOnly]);
+            }
         }
     }
 
@@ -53,8 +50,7 @@ class ListOfficesRequest extends FormRequest
             'sort' => ['sometimes', 'nullable', Rule::in(['name', 'nearest'])],
             'latitude' => ['sometimes', 'numeric', 'between:-90,90'],
             'longitude' => ['sometimes', 'numeric', 'between:-180,180'],
-            'limit' => ['sometimes', 'integer', 'min:1', 'max:'.self::MAX_LIMIT],
-        ];
+        ] + PaginationOptions::rules(allowLimitAlias: true);
     }
 
     /**
@@ -79,5 +75,10 @@ class ListOfficesRequest extends FormRequest
                 }
             },
         ];
+    }
+
+    public function pagination(): PaginationOptions
+    {
+        return PaginationOptions::fromRequest($this, allowLimitAlias: true);
     }
 }

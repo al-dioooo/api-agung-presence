@@ -19,6 +19,33 @@ describe('index', function () {
             ->assertJsonCount(3, 'data');
     });
 
+    test('office list is paginated by default', function () {
+        Office::factory()->count(20)->sequence(
+            fn ($sequence) => ['name' => sprintf('Office %02d', $sequence->index + 1)],
+        )->create();
+        $admin = User::factory()->administrator()->create();
+
+        $firstPage = $this->actingAs($admin)
+            ->getJson(route('offices.index'));
+
+        $firstPage->assertOk()
+            ->assertJsonCount(15, 'data')
+            ->assertJsonPath('meta.current_page', 1)
+            ->assertJsonPath('meta.per_page', 15)
+            ->assertJsonPath('meta.total', 20)
+            ->assertJsonPath('meta.from', 1)
+            ->assertJsonPath('meta.to', 15);
+
+        $secondPage = $this->actingAs($admin)
+            ->getJson(route('offices.index', ['page' => 2]));
+
+        $secondPage->assertOk()
+            ->assertJsonCount(5, 'data')
+            ->assertJsonPath('meta.current_page', 2)
+            ->assertJsonPath('meta.from', 16)
+            ->assertJsonPath('meta.to', 20);
+    });
+
     test('can filter only active offices', function () {
         Office::factory()->count(2)->create();
         Office::factory()->inactive()->create();
@@ -183,7 +210,7 @@ describe('index', function () {
             ->assertJsonPath('data.0.name', 'Near Office');
     });
 
-    test('office filters validate active status nearest coordinates and limit', function () {
+    test('office filters validate active status nearest coordinates limit and pagination', function () {
         $admin = User::factory()->administrator()->create();
 
         $response = $this->actingAs($admin)
@@ -192,10 +219,12 @@ describe('index', function () {
                 'sort' => 'nearest',
                 'latitude' => 91,
                 'limit' => 101,
+                'page' => 0,
+                'per_page' => 101,
             ]));
 
         $response->assertUnprocessable()
-            ->assertJsonValidationErrors(['active_status', 'latitude', 'longitude', 'limit']);
+            ->assertJsonValidationErrors(['active_status', 'latitude', 'longitude', 'limit', 'page', 'per_page']);
     });
 
     test('unauthenticated user cannot list offices', function () {

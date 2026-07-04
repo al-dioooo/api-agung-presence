@@ -166,9 +166,11 @@ paths:
       tags:
         - Users
       summary: List Users
-      description: Administrator-only user list with server-side search, role filtering, and optional bounded results for selectors.
+      description: Administrator-only paginated user list with server-side search and role filtering. Defaults to `per_page=15`; `limit` remains accepted as a backward-compatible page-size alias for selectors.
       operationId: listUsers
       parameters:
+        - $ref: "#/components/parameters/PageQuery"
+        - $ref: "#/components/parameters/PerPageQuery"
         - name: search
           in: query
           required: false
@@ -186,7 +188,7 @@ paths:
         - name: limit
           in: query
           required: false
-          description: Maximum number of users to return. The API accepts values from 1 through 100.
+          description: Backward-compatible alias for `per_page`. The API accepts values from 1 through 100.
           schema:
             type: integer
             minimum: 1
@@ -211,9 +213,11 @@ paths:
       tags:
         - Offices
       summary: List Offices
-      description: Employees receive only active offices. Administrators can search, filter active status, or sort by nearest current location.
+      description: Paginated office list. Employees receive only active offices. Administrators can search, filter active status, or sort by nearest current location. Defaults to `per_page=15`; `limit` remains accepted as a backward-compatible page-size alias for selectors.
       operationId: listOffices
       parameters:
+        - $ref: "#/components/parameters/PageQuery"
+        - $ref: "#/components/parameters/PerPageQuery"
         - name: search
           in: query
           required: false
@@ -270,7 +274,7 @@ paths:
         - name: limit
           in: query
           required: false
-          description: Maximum number of offices to return. The API accepts values from 1 through 100.
+          description: Backward-compatible alias for `per_page`. The API accepts values from 1 through 100.
           schema:
             type: integer
             minimum: 1
@@ -420,14 +424,17 @@ paths:
       tags:
         - Attendance Requests
       summary: List Requests
-      description: Administrators receive all attendance requests. Employees receive only their own requests.
+      description: Paginated attendance request list. Administrators receive all attendance requests. Employees receive only their own requests. Defaults to `per_page=15`.
       operationId: listAttendanceRequests
       parameters:
+        - $ref: "#/components/parameters/PageQuery"
+        - $ref: "#/components/parameters/PerPageQuery"
         - name: approval_status
           in: query
           required: false
           schema:
             $ref: "#/components/schemas/AttendanceRequestStatus"
+        - $ref: "#/components/parameters/AttendanceRequestCoversDate"
       responses:
         "200":
           description: Attendance requests retrieved successfully.
@@ -437,6 +444,8 @@ paths:
                 $ref: "#/components/schemas/AttendanceRequestCollectionResponse"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "422":
+          $ref: "#/components/responses/ValidationError"
     post:
       tags:
         - Attendance Requests
@@ -538,9 +547,11 @@ paths:
       tags:
         - Attendances
       summary: List Attendances
-      description: Administrators receive all matching attendances. Employees receive only their own matching attendances. Results default to newest `created_at` first, with attendance date used as the tie-breaker. When a `date` or complete `start_date` and `end_date` range is provided, missing employee workdays are projected as virtual `absent` rows until a persisted attendance or approved request row exists.
+      description: Paginated attendance detail list. Administrators receive all matching attendances. Employees receive only their own matching attendances. Results default to newest `created_at` first, with attendance date used as the tie-breaker. When a `date` or complete `start_date` and `end_date` range is provided, missing employee workdays are projected as virtual `absent` rows until a persisted attendance or approved request row exists. Defaults to `per_page=15`.
       operationId: listAttendances
       parameters:
+        - $ref: "#/components/parameters/PageQuery"
+        - $ref: "#/components/parameters/PerPageQuery"
         - $ref: "#/components/parameters/AttendanceSearch"
         - $ref: "#/components/parameters/AttendanceUserIdQuery"
         - $ref: "#/components/parameters/AttendanceStatusQuery"
@@ -554,7 +565,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AttendanceCollectionResponse"
+                $ref: "#/components/schemas/PaginatedAttendanceCollectionResponse"
         "401":
           $ref: "#/components/responses/Unauthenticated"
     post:
@@ -592,9 +603,11 @@ paths:
       tags:
         - Attendances
       summary: Attendance Summary
-      description: Administrator-only per-employee totals for matching attendance rows. `total_real_check_ins` counts only `on_time` and `late`. When a `date` or complete `start_date` and `end_date` range is provided, totals include virtual `absent` rows for missing employee workdays.
+      description: Administrator-only paginated per-employee totals for matching attendance rows. `total_real_check_ins` counts only `on_time` and `late`. When a `date` or complete `start_date` and `end_date` range is provided, totals include virtual `absent` rows for missing employee workdays. Defaults to `per_page=15`.
       operationId: attendanceSummary
       parameters:
+        - $ref: "#/components/parameters/PageQuery"
+        - $ref: "#/components/parameters/PerPageQuery"
         - $ref: "#/components/parameters/AttendanceSearch"
         - $ref: "#/components/parameters/AttendanceUserIdQuery"
         - $ref: "#/components/parameters/AttendanceStatusQuery"
@@ -613,6 +626,33 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "403":
           $ref: "#/components/responses/Forbidden"
+
+  /api/attendances/chart:
+    get:
+      tags:
+        - Attendances
+      summary: Attendance Chart
+      description: Non-paginated status buckets for dashboard charting. Uses the same attendance filters as list endpoints but always returns complete daily aggregate counts for the requested date window.
+      operationId: attendanceChart
+      parameters:
+        - $ref: "#/components/parameters/AttendanceSearch"
+        - $ref: "#/components/parameters/AttendanceUserIdQuery"
+        - $ref: "#/components/parameters/AttendanceStatusQuery"
+        - $ref: "#/components/parameters/AttendanceOfficeIdQuery"
+        - $ref: "#/components/parameters/AttendanceDate"
+        - $ref: "#/components/parameters/AttendanceStartDate"
+        - $ref: "#/components/parameters/AttendanceEndDate"
+      responses:
+        "200":
+          description: Attendance chart retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceChartResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "422":
+          $ref: "#/components/responses/ValidationError"
 
   /api/attendances/export:
     get:
@@ -844,6 +884,27 @@ components:
       schema:
         type: integer
         format: int64
+    PageQuery:
+      name: page
+      in: query
+      required: false
+      description: One-based page number. Defaults to `1`.
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      example: 2
+    PerPageQuery:
+      name: per_page
+      in: query
+      required: false
+      description: Rows per page. Defaults to `15`; maximum is `100`.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 15
+      example: 15
     AttendanceSearch:
       name: search
       in: query
@@ -905,6 +966,15 @@ components:
         type: string
         format: date
       example: "2026-06-30"
+    AttendanceRequestCoversDate:
+      name: covers_date
+      in: query
+      required: false
+      description: Restrict attendance requests to ranges where `start_date <= covers_date <= end_date`.
+      schema:
+        type: string
+        format: date
+      example: "2026-06-10"
   responses:
     Unauthenticated:
       description: Unauthenticated.
@@ -974,6 +1044,46 @@ components:
             type: array
             items:
               type: string
+
+    PaginationMeta:
+      type: object
+      required:
+        - current_page
+        - last_page
+        - per_page
+        - total
+        - from
+        - to
+      properties:
+        current_page:
+          type: integer
+          minimum: 1
+          example: 2
+        last_page:
+          type: integer
+          minimum: 1
+          example: 4
+        per_page:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 15
+        total:
+          type: integer
+          minimum: 0
+          example: 52
+        from:
+          type:
+            - integer
+            - "null"
+          minimum: 1
+          example: 16
+        to:
+          type:
+            - integer
+            - "null"
+          minimum: 1
+          example: 30
 
     LoginRequest:
       type: object
@@ -1593,6 +1703,68 @@ components:
             - string
             - "null"
           format: date
+
+    AttendanceChartDay:
+      type: object
+      required:
+        - date
+        - total
+        - on_time
+        - late
+        - absent
+        - sick
+        - leave
+        - permit
+      properties:
+        date:
+          type: string
+          format: date
+        total:
+          type: integer
+        on_time:
+          type: integer
+        late:
+          type: integer
+        absent:
+          type: integer
+        sick:
+          type: integer
+        leave:
+          type: integer
+        permit:
+          type: integer
+
+    AttendanceChart:
+      type: object
+      required:
+        - start_date
+        - end_date
+        - total
+        - days
+      properties:
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        total:
+          type: integer
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceChartDay"
+
+    AttendanceChartResponse:
+      type: object
+      required:
+        - message
+        - data
+      properties:
+        message:
+          type: string
+        data:
+          $ref: "#/components/schemas/AttendanceChart"
         latest_attendance_date:
           type:
             - string
@@ -1615,6 +1787,7 @@ components:
       required:
         - message
         - data
+        - meta
       properties:
         message:
           type: string
@@ -1622,6 +1795,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/User"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
 
     LoginSuccessResponse:
       type: object
@@ -1676,6 +1851,7 @@ components:
       required:
         - message
         - data
+        - meta
       properties:
         message:
           type: string
@@ -1683,6 +1859,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Office"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
 
     AttendanceResponse:
       type: object
@@ -1708,6 +1886,22 @@ components:
           items:
             $ref: "#/components/schemas/Attendance"
 
+    PaginatedAttendanceCollectionResponse:
+      type: object
+      required:
+        - message
+        - data
+        - meta
+      properties:
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Attendance"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+
     AttendanceRequestResponse:
       type: object
       required:
@@ -1724,6 +1918,7 @@ components:
       required:
         - message
         - data
+        - meta
       properties:
         message:
           type: string
@@ -1731,12 +1926,15 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AttendanceRequest"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
 
     AttendanceSummaryResponse:
       type: object
       required:
         - message
         - data
+        - meta
       properties:
         message:
           type: string
@@ -1744,5 +1942,7 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AttendanceSummary"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
 security:
   - sanctum: []

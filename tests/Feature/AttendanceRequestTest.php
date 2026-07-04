@@ -33,6 +33,26 @@ describe('index', function () {
             ->assertJsonCount(2, 'data');
     });
 
+    test('attendance request list is paginated by default', function () {
+        $admin = User::factory()->administrator()->create();
+        AttendanceRequest::factory()->count(20)->create([
+            'approval_status' => AttendanceRequestStatus::Pending,
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('attendance-requests.index', [
+                'approval_status' => AttendanceRequestStatus::Pending->value,
+                'page' => 2,
+            ]));
+
+        $response->assertOk()
+            ->assertJsonCount(5, 'data')
+            ->assertJsonPath('meta.current_page', 2)
+            ->assertJsonPath('meta.per_page', 15)
+            ->assertJsonPath('meta.total', 20)
+            ->assertJsonPath('meta.from', 16);
+    });
+
     test('employee can only list their own attendance requests', function () {
         $employee = User::factory()->employee()->create();
         AttendanceRequest::factory()->count(2)->create(['user_id' => $employee->id]);
@@ -47,6 +67,48 @@ describe('index', function () {
         foreach ($response->json('data') as $attendanceRequest) {
             expect($attendanceRequest['user_id'])->toBe($employee->id);
         }
+    });
+
+    test('attendance requests can be filtered by covered date', function () {
+        $employee = User::factory()->employee()->create();
+        $matchingRequest = AttendanceRequest::factory()->create([
+            'user_id' => $employee->id,
+            'approval_status' => AttendanceRequestStatus::Pending,
+            'start_date' => '2026-06-10',
+            'end_date' => '2026-06-12',
+        ]);
+        AttendanceRequest::factory()->create([
+            'user_id' => $employee->id,
+            'approval_status' => AttendanceRequestStatus::Pending,
+            'start_date' => '2026-06-13',
+            'end_date' => '2026-06-14',
+        ]);
+
+        $response = $this->actingAs($employee)
+            ->getJson(route('attendance-requests.index', [
+                'approval_status' => AttendanceRequestStatus::Pending->value,
+                'covers_date' => '2026-06-11',
+            ]));
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $matchingRequest->id)
+            ->assertJsonPath('meta.total', 1);
+    });
+
+    test('attendance request list validates status date and pagination', function () {
+        $admin = User::factory()->administrator()->create();
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('attendance-requests.index', [
+                'approval_status' => 'archived',
+                'covers_date' => 'not-a-date',
+                'page' => 0,
+                'per_page' => 101,
+            ]));
+
+        $response->assertUnprocessable()
+            ->assertJsonValidationErrors(['approval_status', 'covers_date', 'page', 'per_page']);
     });
 });
 

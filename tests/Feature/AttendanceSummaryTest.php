@@ -4,6 +4,7 @@ use App\Enums\AttendanceRequestStatus;
 use App\Enums\AttendanceStatus;
 use App\Models\Attendance;
 use App\Models\AttendanceRequest;
+use App\Models\Office;
 use App\Models\User;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 
@@ -49,6 +50,56 @@ describe('summary', function () {
             ->assertJsonPath('data.0.leave_count', 1)
             ->assertJsonPath('data.0.permit_count', 1)
             ->assertJsonPath('data.0.absent_count', 1);
+    });
+
+    test('attendance summary is paginated by default', function () {
+        $admin = User::factory()->administrator()->create();
+        User::factory()->employee()->count(20)->sequence(
+            fn ($sequence) => ['name' => sprintf('Employee %02d', $sequence->index + 1)],
+        )->create();
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('attendances.summary', ['page' => 2]));
+
+        $response->assertOk()
+            ->assertJsonCount(5, 'data')
+            ->assertJsonPath('meta.current_page', 2)
+            ->assertJsonPath('meta.per_page', 15)
+            ->assertJsonPath('meta.total', 20)
+            ->assertJsonPath('meta.from', 16)
+            ->assertJsonPath('meta.to', 20);
+    });
+
+    test('attendance chart returns complete unpaginated status buckets', function () {
+        $employees = User::factory()->employee()->count(20)->create([
+            'created_at' => '2026-06-01 08:00:00',
+        ]);
+        $office = Office::factory()->create();
+
+        $employees->each(function (User $employee) use ($office): void {
+            Attendance::factory()->create([
+                'user_id' => $employee->id,
+                'office_id' => $office->id,
+                'date' => '2026-06-10',
+                'status' => AttendanceStatus::OnTime,
+            ]);
+        });
+        $admin = User::factory()->administrator()->create();
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('attendances.chart', [
+                'date' => '2026-06-10',
+                'per_page' => 1,
+            ]));
+
+        $response->assertOk()
+            ->assertJsonMissingPath('meta')
+            ->assertJsonPath('message', 'Attendance chart retrieved successfully.')
+            ->assertJsonPath('data.start_date', '2026-06-10')
+            ->assertJsonPath('data.end_date', '2026-06-10')
+            ->assertJsonPath('data.total', 20)
+            ->assertJsonPath('data.days.0.date', '2026-06-10')
+            ->assertJsonPath('data.days.0.on_time', 20);
     });
 
     test('summary applies attendance filters before counting', function () {

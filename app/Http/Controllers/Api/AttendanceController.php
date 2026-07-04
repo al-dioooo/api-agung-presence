@@ -14,6 +14,7 @@ use App\Models\Attendance;
 use App\Models\Office;
 use App\Support\AttendanceReportBuilder;
 use App\Support\AttendanceWorkdays;
+use App\Support\Pagination\PaginatesCollections;
 use App\Traits\ApiResponse;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -31,9 +32,16 @@ class AttendanceController extends Controller
      */
     public function index(FilterAttendanceRequest $request, AttendanceReportBuilder $reportBuilder): JsonResponse
     {
-        return $this->success(
+        $paginator = PaginatesCollections::paginate(
+            $reportBuilder->detailRows($request->toFilter(), $request->user()),
+            $request->pagination(),
+            $request,
+        );
+
+        return $this->paginatedSuccess(
             'Attendances retrieved successfully.',
-            AttendanceReportDetailResource::collection($reportBuilder->detailRows($request->toFilter(), $request->user())),
+            AttendanceReportDetailResource::collection($paginator->getCollection()),
+            $paginator,
         );
     }
 

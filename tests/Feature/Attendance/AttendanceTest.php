@@ -44,6 +44,33 @@ describe('index', function () {
             ->assertJsonPath('data.0.user.email', 'first.employee@example.com');
     });
 
+    test('attendance list is paginated by default', function () {
+        $admin = User::factory()->administrator()->create();
+        $employee = User::factory()->employee()->create();
+        $office = Office::factory()->create();
+
+        Attendance::factory()->count(20)->sequence(
+            fn ($sequence) => [
+                'user_id' => $employee->id,
+                'office_id' => $office->id,
+                'date' => '2026-06-'.str_pad((string) ($sequence->index + 1), 2, '0', STR_PAD_LEFT),
+                'in_at' => '2026-06-01 08:00:00',
+                'created_at' => now()->subMinutes($sequence->index),
+            ],
+        )->create();
+
+        $response = $this->actingAs($admin)
+            ->getJson(route('attendances.index', ['page' => 2]));
+
+        $response->assertOk()
+            ->assertJsonCount(5, 'data')
+            ->assertJsonPath('meta.current_page', 2)
+            ->assertJsonPath('meta.per_page', 15)
+            ->assertJsonPath('meta.total', 20)
+            ->assertJsonPath('meta.from', 16)
+            ->assertJsonPath('meta.to', 20);
+    });
+
     test('attendance index defaults to newest created at with attendance date tie breaker', function () {
         $admin = User::factory()->administrator()->create();
         $employee = User::factory()->employee()->create();
@@ -180,7 +207,7 @@ describe('index', function () {
             ->assertJsonPath('data.0.date', '2026-06-10');
     });
 
-    test('attendance filters validate invalid status and date range', function () {
+    test('attendance filters validate invalid status date range and pagination', function () {
         $admin = User::factory()->administrator()->create();
 
         $response = $this->actingAs($admin)
@@ -188,10 +215,12 @@ describe('index', function () {
                 'status' => 'holiday',
                 'start_date' => '2026-06-10',
                 'end_date' => '2026-06-01',
+                'page' => 0,
+                'per_page' => 101,
             ]));
 
         $response->assertUnprocessable()
-            ->assertJsonValidationErrors(['status', 'end_date']);
+            ->assertJsonValidationErrors(['status', 'end_date', 'page', 'per_page']);
     });
 
     test('can filter attendances by office and date', function () {

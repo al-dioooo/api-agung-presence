@@ -20,6 +20,35 @@ describe('user resource authorization', function () {
             ->assertJsonCount(3, 'data');
     });
 
+    test('user list is paginated by default', function () {
+        User::factory()->employee()->count(20)->sequence(
+            fn ($sequence) => ['name' => sprintf('Employee %02d', $sequence->index + 1)],
+        )->create();
+        $admin = User::factory()->administrator()->create(['name' => 'Admin User']);
+
+        $firstPage = $this->actingAs($admin)
+            ->getJson(route('users.index', ['role' => UserRole::Employee->value]));
+
+        $firstPage->assertOk()
+            ->assertJsonCount(15, 'data')
+            ->assertJsonPath('meta.current_page', 1)
+            ->assertJsonPath('meta.per_page', 15)
+            ->assertJsonPath('meta.total', 20)
+            ->assertJsonPath('meta.last_page', 2);
+
+        $secondPage = $this->actingAs($admin)
+            ->getJson(route('users.index', [
+                'role' => UserRole::Employee->value,
+                'page' => 2,
+            ]));
+
+        $secondPage->assertOk()
+            ->assertJsonCount(5, 'data')
+            ->assertJsonPath('meta.current_page', 2)
+            ->assertJsonPath('meta.from', 16)
+            ->assertJsonPath('meta.to', 20);
+    });
+
     test('administrator can search users by identity fields', function () {
         User::factory()->employee()->create([
             'name' => 'Maya Lestari',
@@ -84,17 +113,19 @@ describe('user resource authorization', function () {
             ->assertJsonPath('data.0.role', UserRole::Employee->value);
     });
 
-    test('user list validates role and limit filters', function () {
+    test('user list validates role limit and pagination filters', function () {
         $admin = User::factory()->administrator()->create();
 
         $response = $this->actingAs($admin)
             ->getJson(route('users.index', [
                 'role' => 'owner',
                 'limit' => 101,
+                'page' => 0,
+                'per_page' => 101,
             ]));
 
         $response->assertUnprocessable()
-            ->assertJsonValidationErrors(['role', 'limit']);
+            ->assertJsonValidationErrors(['role', 'limit', 'page', 'per_page']);
     });
 
     test('administrator can view a user', function () {

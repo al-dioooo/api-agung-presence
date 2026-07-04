@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Enums\AttendanceRequestStatus;
 use App\Enums\AttendanceStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Attendance\ListAttendanceRequestsRequest;
 use App\Http\Requests\Attendance\ReviewAttendanceRequest;
 use App\Http\Requests\Attendance\StoreAttendanceApplicationRequest;
 use App\Http\Resources\AttendanceRequestResource;
@@ -23,16 +24,18 @@ class AttendanceRequestController extends Controller
     /**
      * Display a listing of attendance requests.
      */
-    public function index(Request $request): JsonResponse
+    public function index(ListAttendanceRequestsRequest $request): JsonResponse
     {
-        $request->validate([
-            'approval_status' => ['sometimes', 'string'],
-        ]);
-
         $query = AttendanceRequest::with(['user', 'reviewer'])
             ->when(
                 $request->filled('approval_status'),
-                fn ($query) => $query->where('approval_status', $request->string('approval_status')->toString()),
+                fn ($query) => $query->where('approval_status', $request->validated('approval_status')),
+            )
+            ->when(
+                $request->filled('covers_date'),
+                fn ($query) => $query
+                    ->whereDate('start_date', '<=', $request->validated('covers_date'))
+                    ->whereDate('end_date', '>=', $request->validated('covers_date')),
             )
             ->orderByRaw("case when approval_status = 'pending' then 0 else 1 end")
             ->orderByDesc('created_at');
@@ -41,7 +44,14 @@ class AttendanceRequestController extends Controller
             $query->where('user_id', $request->user()?->id);
         }
 
-        return $this->success('Attendance requests retrieved successfully.', AttendanceRequestResource::collection($query->get()));
+        $pagination = $request->pagination();
+        $paginator = $query->paginate($pagination->perPage, ['*'], 'page', $pagination->page);
+
+        return $this->paginatedSuccess(
+            'Attendance requests retrieved successfully.',
+            AttendanceRequestResource::collection($paginator->getCollection()),
+            $paginator,
+        );
     }
 
     /**

@@ -71,6 +71,54 @@ class AttendanceReportBuilder
     }
 
     /**
+     * @return array{
+     *     start_date: string,
+     *     end_date: string,
+     *     total: int,
+     *     days: list<array<string, int|string>>
+     * }
+     */
+    public function chartBuckets(?AttendanceFilter $filter = null, ?User $actor = null): array
+    {
+        $filter ??= new AttendanceFilter;
+        $details = $this->detailRows($filter, $actor, false, 'date');
+        [$startDate, $endDate] = $this->chartDateWindow($filter, $details);
+        $statuses = collect(AttendanceStatus::cases())->map(fn (AttendanceStatus $status) => $status->value);
+        $days = [];
+        $cursor = CarbonImmutable::parse($startDate);
+        $lastDate = CarbonImmutable::parse($endDate);
+
+        while ($cursor->lte($lastDate)) {
+            $dateKey = $cursor->toDateString();
+            $days[$dateKey] = ['date' => $dateKey, 'total' => 0];
+
+            foreach ($statuses as $status) {
+                $days[$dateKey][$status] = 0;
+            }
+
+            $cursor = $cursor->addDay();
+        }
+
+        $details->each(function (ProjectedAttendance $row) use (&$days): void {
+            $dateKey = $row->date->toDateString();
+
+            if (! isset($days[$dateKey])) {
+                return;
+            }
+
+            $days[$dateKey][$row->status->value]++;
+            $days[$dateKey]['total']++;
+        });
+
+        return [
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'total' => $details->count(),
+            'days' => array_values($days),
+        ];
+    }
+
+    /**
      * @return Collection<int, ProjectedAttendance>
      */
     private function virtualRows(AttendanceFilter $filter, ?User $actor): Collection
@@ -147,6 +195,29 @@ class AttendanceReportBuilder
         }
 
         return null;
+    }
+
+    /**
+     * @param  Collection<int, ProjectedAttendance>  $details
+     * @return array{0: string, 1: string}
+     */
+    private function chartDateWindow(AttendanceFilter $filter, Collection $details): array
+    {
+        $window = $this->dateWindow($filter);
+
+        if ($window !== null) {
+            return $window;
+        }
+
+        if ($details->isNotEmpty()) {
+            $dates = $details->map(fn (ProjectedAttendance $row) => $row->date->toDateString());
+
+            return [$dates->min(), $dates->max()];
+        }
+
+        $endDate = CarbonImmutable::now();
+
+        return [$endDate->subDays(6)->toDateString(), $endDate->toDateString()];
     }
 
     /**

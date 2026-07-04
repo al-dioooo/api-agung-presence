@@ -8,6 +8,7 @@ use App\Http\Requests\Office\StoreOfficeRequest;
 use App\Http\Requests\Office\UpdateOfficeRequest;
 use App\Http\Resources\OfficeResource;
 use App\Models\Office;
+use App\Support\Pagination\PaginatesCollections;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -46,7 +47,7 @@ class OfficeController extends Controller
             });
         }
 
-        $limit = $request->filled('limit') ? $request->integer('limit') : null;
+        $pagination = $request->pagination();
 
         if ($request->validated('sort') === 'nearest') {
             $latitude = (float) $request->validated('latitude');
@@ -66,20 +67,17 @@ class OfficeController extends Controller
                 ->sortBy('distance_meters')
                 ->values();
 
-            if ($limit !== null) {
-                $offices = $offices->take($limit)->values();
-            }
+            $paginator = PaginatesCollections::paginate($offices, $pagination, $request);
         } else {
             $query->orderBy('name');
-
-            if ($limit !== null) {
-                $query->limit($limit);
-            }
-
-            $offices = $query->get();
+            $paginator = $query->paginate($pagination->perPage, ['*'], 'page', $pagination->page);
         }
 
-        return $this->success('Offices retrieved successfully.', OfficeResource::collection($offices));
+        return $this->paginatedSuccess(
+            'Offices retrieved successfully.',
+            OfficeResource::collection($paginator->getCollection()),
+            $paginator,
+        );
     }
 
     /**

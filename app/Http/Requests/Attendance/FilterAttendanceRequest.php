@@ -4,8 +4,10 @@ namespace App\Http\Requests\Attendance;
 
 use App\Enums\AttendanceStatus;
 use App\Support\AttendanceFilter;
+use App\Support\Pagination\PaginationOptions;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Arr;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
@@ -34,7 +36,7 @@ class FilterAttendanceRequest extends FormRequest
             'date' => ['sometimes', 'date', 'date_format:Y-m-d'],
             'start_date' => ['sometimes', 'date', 'date_format:Y-m-d'],
             'end_date' => ['sometimes', 'date', 'date_format:Y-m-d'],
-        ];
+        ] + PaginationOptions::rules();
     }
 
     /**
@@ -59,6 +61,11 @@ class FilterAttendanceRequest extends FormRequest
 
     public function toFilter(): AttendanceFilter
     {
-        return new AttendanceFilter($this->validated());
+        return new AttendanceFilter(Arr::except($this->validated(), ['page', 'per_page']));
+    }
+
+    public function pagination(): PaginationOptions
+    {
+        return PaginationOptions::fromRequest($this);
     }
 }

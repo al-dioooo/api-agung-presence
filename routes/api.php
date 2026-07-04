@@ -42,6 +42,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('attendances/summary', [AttendanceReportController::class, 'summary'])
         ->middleware('role:administrator')
         ->name('attendances.summary');
+    Route::get('attendances/chart', [AttendanceReportController::class, 'chart'])
+        ->name('attendances.chart');
     Route::get('attendances/export', [AttendanceReportController::class, 'export'])
         ->middleware('role:administrator')
         ->name('attendances.export');

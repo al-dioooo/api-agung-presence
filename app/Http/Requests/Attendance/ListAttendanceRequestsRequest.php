@@ -1,14 +1,14 @@
 <?php
 
-namespace App\Http\Requests\User;
+namespace App\Http\Requests\Attendance;
 
-use App\Enums\UserRole;
+use App\Enums\AttendanceRequestStatus;
 use App\Support\Pagination\PaginationOptions;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class ListUsersRequest extends FormRequest
+class ListAttendanceRequestsRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
@@ -26,13 +26,13 @@ class ListUsersRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'search' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'role' => ['sometimes', 'nullable', Rule::enum(UserRole::class)],
-        ] + PaginationOptions::rules(allowLimitAlias: true);
+            'approval_status' => ['sometimes', 'nullable', Rule::enum(AttendanceRequestStatus::class)],
+            'covers_date' => ['sometimes', 'date', 'date_format:Y-m-d'],
+        ] + PaginationOptions::rules();
     }
 
     public function pagination(): PaginationOptions
     {
-        return PaginationOptions::fromRequest($this, allowLimitAlias: true);
+        return PaginationOptions::fromRequest($this);
     }
 }
