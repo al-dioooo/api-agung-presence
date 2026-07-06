@@ -12,6 +12,7 @@ use App\Http\Resources\AttendanceReportDetailResource;
 use App\Http\Resources\AttendanceResource;
 use App\Models\Attendance;
 use App\Models\Office;
+use App\Support\AttendanceAbsencePolicy;
 use App\Support\AttendanceReportBuilder;
 use App\Support\AttendanceWorkdays;
 use App\Support\Pagination\PaginatesCollections;
@@ -52,9 +53,7 @@ class AttendanceController extends Controller
     {
         $data = $request->validated();
         $office = Office::findOrFail($data['office_id']);
-        $inAt = isset($data['in_at'])
-            ? CarbonImmutable::parse($data['in_at'])
-            : CarbonImmutable::now();
+        $inAt = $this->checkInTimestamp($data);
 
         if (! $request->user()?->isAdministrator()) {
             $data['user_id'] = $request->user()?->id;
@@ -98,7 +97,7 @@ class AttendanceController extends Controller
             ]);
         }
 
-        $date = $data['date'] ?? $inAt->toDateString();
+        $date = $data['date'] ?? $this->attendanceDate($inAt);
         $realAttendanceData = [
             ...$data,
             'attendance_request_id' => null,
@@ -281,11 +280,38 @@ class AttendanceController extends Controller
 
     private function resolveStatus(CarbonImmutable $inAt, Office $office): AttendanceStatus
     {
-        $workStart = CarbonImmutable::parse($inAt->toDateString().' '.$office->work_start_time);
+        $localInAt = $inAt->setTimezone(AttendanceAbsencePolicy::TIMEZONE);
+        $workStart = CarbonImmutable::parse(
+            $localInAt->toDateString().' '.$office->work_start_time,
+            AttendanceAbsencePolicy::TIMEZONE,
+        );
 
-        return $inAt->gt($workStart)
+        return $localInAt->gt($workStart)
             ? AttendanceStatus::Late
             : AttendanceStatus::OnTime;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function checkInTimestamp(array $data): CarbonImmutable
+    {
+        if (isset($data['in_at'])) {
+            return CarbonImmutable::parse(
+                $data['in_at'],
+                AttendanceAbsencePolicy::TIMEZONE,
+            )->setTimezone('UTC');
+        }
+
+        return CarbonImmutable::now(AttendanceAbsencePolicy::TIMEZONE)
+            ->setTimezone('UTC');
+    }
+
+    private function attendanceDate(CarbonImmutable $inAt): string
+    {
+        return $inAt
+            ->setTimezone(AttendanceAbsencePolicy::TIMEZONE)
+            ->toDateString();
     }
 
     private function distanceInMeters(float $fromLatitude, float $fromLongitude, float $toLatitude, float $toLongitude): float

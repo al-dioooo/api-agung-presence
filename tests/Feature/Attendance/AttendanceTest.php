@@ -5,6 +5,7 @@ use App\Models\Attendance;
 use App\Models\Office;
 use App\Models\User;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Carbon;
 
 uses(LazilyRefreshDatabase::class);
 
@@ -410,6 +411,67 @@ describe('store', function () {
 
         $response->assertCreated()
             ->assertJsonPath('data.user_id', $employee->id);
+    });
+
+    test('check in without explicit date uses the jakarta calendar day', function () {
+        Carbon::setTestNow(Carbon::parse('2026-07-07 03:45:00', 'Asia/Jakarta'));
+
+        try {
+            $employee = User::factory()->employee()->create();
+            $office = Office::factory()->create([
+                'latitude' => -2.965107,
+                'longitude' => 104.736443,
+                'radius' => 50,
+                'work_start_time' => '08:00',
+            ]);
+
+            $response = $this->actingAs($employee)
+                ->postJson(route('attendances.store'), [
+                    'office_id' => $office->id,
+                    'in_latitude' => -2.965107,
+                    'in_longitude' => 104.736443,
+                ]);
+
+            $response->assertCreated()
+                ->assertJsonPath('data.date', '2026-07-07')
+                ->assertJsonPath('data.status', AttendanceStatus::OnTime->value);
+
+            expect(Attendance::query()
+                ->where('user_id', $employee->id)
+                ->where('office_id', $office->id)
+                ->whereDate('date', '2026-07-07')
+                ->where('status', AttendanceStatus::OnTime->value)
+                ->exists())->toBeTrue();
+        } finally {
+            Carbon::setTestNow();
+        }
+    });
+
+    test('check in without explicit timestamp resolves lateness in jakarta time', function () {
+        Carbon::setTestNow(Carbon::parse('2026-07-07 08:01:00', 'Asia/Jakarta'));
+
+        try {
+            $employee = User::factory()->employee()->create();
+            $office = Office::factory()->create([
+                'latitude' => -2.965107,
+                'longitude' => 104.736443,
+                'radius' => 50,
+                'work_start_time' => '08:00',
+            ]);
+
+            $response = $this->actingAs($employee)
+                ->postJson(route('attendances.store'), [
+                    'office_id' => $office->id,
+                    'in_latitude' => -2.965107,
+                    'in_longitude' => 104.736443,
+                ]);
+
+            $response->assertCreated()
+                ->assertJsonPath('data.date', '2026-07-07')
+                ->assertJsonPath('data.status', AttendanceStatus::Late->value);
+        } finally {
+            Carbon::setTestNow();
+        }
     });
 
     test('employee cannot provide user_id (it gets overridden by their own)', function () {
